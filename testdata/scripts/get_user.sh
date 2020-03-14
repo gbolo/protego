@@ -17,10 +17,4 @@ URL="http://127.0.0.1:8080/api/v1/user"
 # }
 
 
-http --print=HhBb POST ${URL} ADMIN-SECRET:supersecret \
-  enabled:=true \
-  description="this is a test" \
-  secret="password" \
-  acl_allow_all:=false \
-  ttl_minutes:=5 \
-  acl_allowed_hosts:='["git.fqdn","emby.fqdn","tor.fqdn"]'
+http --print=HhBb GET ${URL}/5e8848 ADMIN-SECRET:supersecret

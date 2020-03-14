@@ -229,6 +229,29 @@ func handlerClientModify(w http.ResponseWriter, req *http.Request) {
 	writeJSONResponse(w, http.StatusOK, map[string]string{"user-ID": user.ID})
 }
 
+func handlerGetUser(w http.ResponseWriter, req *http.Request) {
+	// validate authorization header if enabled
+	// TODO: the user should also be able to modify itself
+	if viper.GetString("admin.secret") != "" && req.Header.Get("ADMIN-SECRET") != viper.GetString("admin.secret") {
+		log.Warningf("admin credentials rejected")
+		writeJSONResponse(w, http.StatusUnauthorized, errorResponse{"admin credentials rejected"})
+		return
+	}
+
+	// get vars from request to determine if user id was specified
+	vars := mux.Vars(req)
+	userId := vars["user-id"]
+	user, err := dataProvider.GetUser(userId)
+	if user == nil || err != nil {
+		log.Warningf("user was not found: %s", userId)
+		writeJSONResponse(w, http.StatusBadRequest, errorResponse{"user was not found"})
+		return
+	}
+	// redact the user secret hash
+	user.Secret = "_REDACTED_"
+	writeJSONResponse(w, http.StatusOK, user)
+}
+
 func handlerClientDelete(w http.ResponseWriter, req *http.Request) {
 	// validate authorization header if enabled
 	if viper.GetString("admin.secret") != "" && req.Header.Get("ADMIN-SECRET") != viper.GetString("admin.secret") {

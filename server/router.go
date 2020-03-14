@@ -58,9 +58,16 @@ var routes = Routes{
 
 	Route{
 		"UserAdd",
-		"PUT",
+		"POST",
 		getEndpoint("user"),
 		handlerClientAdd,
+	},
+
+	Route{
+		"UserModify",
+		"PUT",
+		getEndpoint("user/{user-id}"),
+		handlerClientModify,
 	},
 
 	Route{
@@ -68,6 +75,13 @@ var routes = Routes{
 		"DELETE",
 		getEndpoint("user/{user-id}"),
 		handlerClientDelete,
+	},
+
+	Route{
+		"UserGet",
+		"GET",
+		getEndpoint("user/{user-id}"),
+		handlerGetUser,
 	},
 }
 
