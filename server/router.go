@@ -1,8 +1,10 @@
 package server
 
 import (
+	_ "expvar"
 	"fmt"
 	"net/http"
+	_ "net/http/pprof"
 
 	_ "github.com/gbolo/protego/docs"
 	"github.com/gorilla/handlers"
@@ -12,7 +14,7 @@ import (
 )
 
 const (
-	// APIVersion defines the compatability version of the API and is appended to each API route
+	// APIVersion defines the compatibility version of the API and is appended to each API route
 	APIVersion     = "1"
 	endpointFormat = "/api/v%s/%s"
 )
@@ -118,6 +120,12 @@ func newRouter() *mux.Router {
 	staticPath := viper.GetString("server.static_files_dir")
 	if staticPath == "" {
 		staticPath = "./frontend/dist"
+	}
+
+	// add route for pprof if enabled
+	if viper.GetBool("server.enable_profiler") {
+		log.Warning("profiler is enabled on endpoint /debug/")
+		router.Methods("GET").PathPrefix("/debug/").Handler(http.DefaultServeMux)
 	}
 
 	handlerStatic := http.StripPrefix("/", http.FileServer(http.Dir(staticPath)))
