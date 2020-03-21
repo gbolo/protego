@@ -27,6 +27,11 @@ server:
   # currently only gzip is supported
   compression: false
 
+  # enable the golang debug profiler:
+  #   pprof available at /debug/pprof
+  #   mem stats available at /debug/vars
+  enable_profiler: false
+
   # TLS options
   tls:
     # enables TLS
