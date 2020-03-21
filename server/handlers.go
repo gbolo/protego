@@ -13,22 +13,37 @@ import (
 	"github.com/spf13/viper"
 )
 
-type errorResponse struct {
-	Error string `json:"error"`
-}
+// @title Protego - REST API
+// @version 1.0
+// @description Swagger API for Protego - https://github.com/gbolo/protego
+// @termsOfService http://swagger.io/terms/
+// @contact.name API Support
+// @contact.email gbolo@linuxctl.com
+// @license.name MIT
+// @license.url https://github.com/gbolo/protego/blob/master/LICENSE
+// @BasePath /api/v1
 
-type challengeResponse struct {
-	Message   string `json:"message"`
-	UserId    string `json:"user_id"`
-	IpAddress string `json:"ip_address"`
-	dataprovider.ACL
-}
 
-// returns version information
+// handlerVersion godoc
+// @Summary Version information
+// @Description Retrieve the version information of this Protego server
+// @Tags Version
+// @Produce  json
+// @Success 200 {object} version
+// @Router /version [get]
 func handlerVersion(w http.ResponseWriter, req *http.Request) {
-	writeJSONResponse(w, http.StatusOK, map[string]string{"version": "v1"})
+	writeJSONResponse(w, http.StatusOK, version{"v0.1-alpha", "git-30b8019"})
 }
 
+// handlerAuthorize godoc
+// @Summary NGINX auth_request destination
+// @Description Configure NGINX auth_request to this endpoint
+// @Tags Authorization
+// @Param X-Real-IP header string true "IP address of the user"
+// @Param Host header string false "the host (FQDN) the user is making a request to"
+// @Success 200 "access granted"
+// @Failure 401 "unauthorized - user IP is unknown or not permitted to access this host"
+// @Router /authorize [get]
 // this endpoint determines whether or not the client is allowed to access the resource
 func handlerAuthorize(w http.ResponseWriter, req *http.Request) {
 	// determine the client's real IP.
@@ -70,26 +85,38 @@ func handlerAuthorize(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(http.StatusUnauthorized)
 }
 
+// handlerChallenge godoc
+// @Summary Challenge used to authorize an IP address for access
+// @Description A user must successfully POST to this URL in order for their IP address to be granted access
+// @Tags Authorization
+// @Produce  json
+// @Param X-Real-IP header string true "IP address of the user"
+// @Param User-Secret header string true "Secret that was given to/by the user"
+// @Success 200 "challenge was accepted: the value of X-Real-IP has been granted an ACL" {object} challengeResponse
+// @Failure 400 "bad request: X-Real-IP is not set" {object} errorResponse
+// @Failure 401 "unauthorized: the user secret is incorrect or the user is disabled" {object} errorResponse
+// @Failure 500 "server could not process the request" {object} errorResponse
+// @Router /challenge [post]
 func handlerChallenge(w http.ResponseWriter, req *http.Request) {
 	// determine the actualUser's real IP.
 	// the proxy MUST set the http header X-Real-IP.
-	// *NOTE* for security reasons, the proxy should set this itself and ignore any value the actualUser may have passed
+	// *NOTE* for security reasons, the proxy should set this itself and ignore any value the client may have passed
 	// TODO: maybe add support for X-Forwarded-For list
 	clientIP := req.Header.Get("X-Real-IP")
 	if !validate.IsIP(clientIP) {
 		log.Errorf("X-Real-IP is either set incorrectly or missing! DENYING ACCESS")
-		writeJSONResponse(w, http.StatusServiceUnavailable, errorResponse{"Unable to properly determine actualUser's IP"})
+		writeJSONResponse(w, http.StatusBadRequest, errorResponse{"Unable to properly determine user's IP address"})
 		// additional logging for debug
 		log.Debugf("X-Real-IP is of length %d with value: %s", len(clientIP), clientIP)
 		return
 	}
 
 	// now we check if the actualUser provided a secret
-	clientSecret := req.Header.Get("CLIENT-SECRET")
+	clientSecret := req.Header.Get("User-Secret")
 	user, err := dataprovider.NewUser(clientSecret, "")
 	if err == dataprovider.ErrSecretLength {
-		log.Infof("actualUser %s was denied due to challenge failure", clientIP)
-		writeJSONResponse(w, http.StatusUnauthorized, errorResponse{"CLIENT-SECRET is incorrect"})
+		log.Infof("user %s was denied due to challenge failure", clientIP)
+		writeJSONResponse(w, http.StatusUnauthorized, errorResponse{"User-Secret is incorrect"})
 		return
 	}
 
@@ -97,14 +124,14 @@ func handlerChallenge(w http.ResponseWriter, req *http.Request) {
 	actualUser, err := dataProvider.GetUser(user.ID)
 	if actualUser == nil || err != nil {
 		log.Infof("user %s was denied due to incorrect secret", clientIP)
-		writeJSONResponse(w, http.StatusUnauthorized, errorResponse{"unable to find actualUser"})
+		writeJSONResponse(w, http.StatusUnauthorized, errorResponse{"unable to find user"})
 		return
 	}
 
 	// deny the actualUser if it is disabled
 	if !actualUser.Enabled {
-		log.Infof("actualUser %s was denied due to being disabled", clientIP)
-		writeJSONResponse(w, http.StatusUnauthorized, errorResponse{"this actualUser is currently disabled"})
+		log.Infof("user %s was denied due to being disabled", clientIP)
+		writeJSONResponse(w, http.StatusUnauthorized, errorResponse{"this user is currently disabled"})
 		return
 	}
 
@@ -116,7 +143,7 @@ func handlerChallenge(w http.ResponseWriter, req *http.Request) {
 	if actualUser.TTLMinutes > 0 {
 		ttl := time.Now().Add(time.Duration(actualUser.TTLMinutes) * time.Minute)
 		acl.TTL = &ttl
-		log.Infof("set user IP TTL to: %v", ttl)
+		log.Infof("set user IP (%s) TTL to: %v", clientIP, ttl)
 	}
 	err = dataProvider.AddIp(clientIP, &acl)
 	if err != nil {
@@ -126,6 +153,7 @@ func handlerChallenge(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// successful response
+	log.Infof("user %s with IP (%s) has been added to ACL", user.ID, clientIP)
 	apiResponse := challengeResponse{
 		Message:   "access has been granted",
 		UserId:    actualUser.ID,
@@ -135,9 +163,20 @@ func handlerChallenge(w http.ResponseWriter, req *http.Request) {
 	writeJSONResponse(w, http.StatusAccepted, apiResponse)
 }
 
-func handlerClientAdd(w http.ResponseWriter, req *http.Request) {
+
+// handlerUserAdd godoc
+// @Summary Add a new User
+// @Description add by json user
+// @Tags User
+// @Accept  json
+// @Produce  json
+// @Param Admin-Secret header string true "Admin Secret"
+// @Param user body server.addUser true "Add User"
+// @Success 200 {object} server.getUser
+// @Router /user [post]
+func handlerUserAdd(w http.ResponseWriter, req *http.Request) {
 	// validate authorization header if enabled
-	if viper.GetString("admin.secret") != "" && req.Header.Get("ADMIN-SECRET") != viper.GetString("admin.secret") {
+	if viper.GetString("admin.secret") != "" && req.Header.Get("Admin-Secret") != viper.GetString("admin.secret") {
 		log.Warningf("admin credentials rejected")
 		writeJSONResponse(w, http.StatusUnauthorized, errorResponse{"admin credentials rejected"})
 		return
@@ -176,13 +215,23 @@ func handlerClientAdd(w http.ResponseWriter, req *http.Request) {
 	}
 	// user has been added
 	log.Infof("new user has been added: %s", user.ID)
-	writeJSONResponse(w, http.StatusOK, map[string]string{"user-ID": user.ID})
+	writeJSONResponse(w, http.StatusOK, getUserConvert(user))
 }
 
-func handlerClientModify(w http.ResponseWriter, req *http.Request) {
+// handlerUserUpdate godoc
+// @Summary Update an existing User
+// @Description update by json user
+// @Tags User
+// @Accept  json
+// @Produce  json
+// @Param Admin-Secret header string true "Admin Secret"
+// @Param user body server.modifyUser true "Update User"
+// @Success 200 {object} server.getUser
+// @Router /user/{id} [put]
+func handlerUserUpdate(w http.ResponseWriter, req *http.Request) {
 	// validate authorization header if enabled
 	// TODO: the user should also be able to modify itself
-	if viper.GetString("admin.secret") != "" && req.Header.Get("ADMIN-SECRET") != viper.GetString("admin.secret") {
+	if viper.GetString("admin.secret") != "" && req.Header.Get("Admin-Secret") != viper.GetString("admin.secret") {
 		log.Warningf("admin credentials rejected")
 		writeJSONResponse(w, http.StatusUnauthorized, errorResponse{"admin credentials rejected"})
 		return
@@ -225,11 +274,20 @@ func handlerClientModify(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// user has been updated
-	log.Infof("new user has been updated: %s", user.ID)
-	writeJSONResponse(w, http.StatusOK, map[string]string{"user-ID": user.ID})
+	log.Infof("user has been updated: %s", user.ID)
+	writeJSONResponse(w, http.StatusOK, getUserConvert(modifiedUser))
 }
 
-func handlerGetUser(w http.ResponseWriter, req *http.Request) {
+// handlerUserGet godoc
+// @Summary Retrieve a User based on provided ID
+// @Description get User by ID
+// @Tags User
+// @Produce json
+// @Param ADMIN-SECRET header string true "Admin Secret"
+// @Param id path string true "User ID"
+// @Success 200 {object} server.getUser
+// @Router /user/{id} [get]
+func handlerUserGet(w http.ResponseWriter, req *http.Request) {
 	// validate authorization header if enabled
 	// TODO: the user should also be able to modify itself
 	if viper.GetString("admin.secret") != "" && req.Header.Get("ADMIN-SECRET") != viper.GetString("admin.secret") {
@@ -247,12 +305,19 @@ func handlerGetUser(w http.ResponseWriter, req *http.Request) {
 		writeJSONResponse(w, http.StatusBadRequest, errorResponse{"user was not found"})
 		return
 	}
-	// redact the user secret hash
-	user.Secret = "_REDACTED_"
-	writeJSONResponse(w, http.StatusOK, user)
+	writeJSONResponse(w, http.StatusOK, getUserConvert(user))
 }
 
-func handlerClientDelete(w http.ResponseWriter, req *http.Request) {
+// handlerUserDelete godoc
+// @Summary Remove a User based on provided ID
+// @Description remove a User by ID
+// @Tags User
+// @Produce json
+// @Param ADMIN-SECRET header string true "Admin Secret"
+// @Param id path string true "User ID"
+// @Success 200 {object} server.getUser
+// @Router /user/{id} [delete]
+func handlerUserDelete(w http.ResponseWriter, req *http.Request) {
 	// validate authorization header if enabled
 	if viper.GetString("admin.secret") != "" && req.Header.Get("ADMIN-SECRET") != viper.GetString("admin.secret") {
 		log.Warningf("admin credentials rejected")
@@ -278,7 +343,7 @@ func handlerClientDelete(w http.ResponseWriter, req *http.Request) {
 	}
 	// user has been removed
 	log.Infof("user has been removed: %s", userId)
-	writeJSONResponse(w, http.StatusOK, map[string]string{"User-ID": userId})
+	writeJSONResponse(w, http.StatusOK, getUserConvert(user))
 }
 
 // wrapper for json responses

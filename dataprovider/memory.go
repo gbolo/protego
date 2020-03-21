@@ -12,7 +12,7 @@ import (
 type MemoryProvider struct {
 	users map[string]User
 	acls  map[string]ACL
-	lock  *sync.Mutex
+	lock  *sync.Mutex // TODO: use RWMutex
 }
 
 func NewMemoryProvider() (p MemoryProvider, err error) {
@@ -24,7 +24,7 @@ func (p *MemoryProvider) InitializeDatabase() (err error) {
 	p.users = make(map[string]User)
 	p.acls = make(map[string]ACL)
 	p.lock = new(sync.Mutex)
-	log.Infof("Memory provider has been Initialized")
+	log.Warningf("in-memory data provider has been initialized. This setting should only be used for testing.")
 	return nil
 }
 
