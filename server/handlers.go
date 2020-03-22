@@ -296,14 +296,14 @@ func handlerUserUpdate(w http.ResponseWriter, req *http.Request) {
 // @Description get User by ID
 // @Tags User
 // @Produce json
-// @Param ADMIN-SECRET header string true "Admin Secret"
+// @Param Admin-Secret header string true "Admin Secret"
 // @Param id path string true "User ID"
 // @Success 200 {object} server.getUser
 // @Router /user/{id} [get]
 func handlerUserGet(w http.ResponseWriter, req *http.Request) {
 	// validate authorization header if enabled
 	// TODO: the user should also be able to modify itself
-	if viper.GetString("admin.secret") != "" && req.Header.Get("ADMIN-SECRET") != viper.GetString("admin.secret") {
+	if viper.GetString("admin.secret") != "" && req.Header.Get("Admin-Secret") != viper.GetString("admin.secret") {
 		log.Warningf("admin credentials rejected")
 		writeJSONResponse(w, http.StatusUnauthorized, errorResponse{"admin credentials rejected"})
 		return
@@ -321,18 +321,50 @@ func handlerUserGet(w http.ResponseWriter, req *http.Request) {
 	writeJSONResponse(w, http.StatusOK, getUserConvert(user))
 }
 
+// handlerUserGetAll godoc
+// @Summary Retrieve all Users
+// @Description get all Users
+// @Tags User
+// @Produce json
+// @Param Admin-Secret header string true "Admin Secret"
+// @Success 200 {array} server.getUser
+// @Router /user [get]
+func handlerUserGetAll(w http.ResponseWriter, req *http.Request) {
+	// validate authorization header if enabled
+	// TODO: the user should also be able to modify itself
+	if viper.GetString("admin.secret") != "" && req.Header.Get("Admin-Secret") != viper.GetString("admin.secret") {
+		log.Warningf("admin credentials rejected")
+		writeJSONResponse(w, http.StatusUnauthorized, errorResponse{"admin credentials rejected"})
+		return
+	}
+
+	users, err := dataProvider.GetAllUsers()
+	if err != nil {
+		log.Warningf("could not get all users: %v", err)
+		writeJSONResponse(w, http.StatusServiceUnavailable, errorResponse{"could not retrieve all users"})
+		return
+	}
+	// TODO: writeJSONResponse cannot properly handle an empty slice
+	if len(users) == 0 {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`[]`))
+		return
+	}
+	writeJSONResponse(w, http.StatusOK, getAllUsersConvert(users))
+}
+
 // handlerUserDelete godoc
 // @Summary Remove a User based on provided ID
 // @Description remove a User by ID
 // @Tags User
 // @Produce json
-// @Param ADMIN-SECRET header string true "Admin Secret"
+// @Param Admin-Secret header string true "Admin Secret"
 // @Param id path string true "User ID"
 // @Success 200 {object} server.getUser
 // @Router /user/{id} [delete]
 func handlerUserDelete(w http.ResponseWriter, req *http.Request) {
 	// validate authorization header if enabled
-	if viper.GetString("admin.secret") != "" && req.Header.Get("ADMIN-SECRET") != viper.GetString("admin.secret") {
+	if viper.GetString("admin.secret") != "" && req.Header.Get("Admin-Secret") != viper.GetString("admin.secret") {
 		log.Warningf("admin credentials rejected")
 		writeJSONResponse(w, http.StatusUnauthorized, errorResponse{"admin credentials rejected"})
 		return

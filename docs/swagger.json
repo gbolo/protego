@@ -91,6 +91,36 @@
             }
         },
         "/user": {
+            "get": {
+                "description": "get all Users",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "User"
+                ],
+                "summary": "Retrieve all Users",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Admin Secret",
+                        "name": "Admin-Secret",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/server.getUser"
+                            }
+                        }
+                    }
+                }
+            },
             "post": {
                 "description": "add by json user",
                 "consumes": [
@@ -145,7 +175,7 @@
                     {
                         "type": "string",
                         "description": "Admin Secret",
-                        "name": "ADMIN-SECRET",
+                        "name": "Admin-Secret",
                         "in": "header",
                         "required": true
                     },
@@ -218,7 +248,7 @@
                     {
                         "type": "string",
                         "description": "Admin Secret",
-                        "name": "ADMIN-SECRET",
+                        "name": "Admin-Secret",
                         "in": "header",
                         "required": true
                     },
