@@ -21,6 +21,7 @@ import (
 var (
 	log          = config.GetLogger()
 	dataProvider dataprovider.Provider
+	ddnsProvider dataprovider.DdnsProvider
 
 	// set timeouts to avoid Slowloris attacks.
 	httpWriteTimeout = time.Second * 15
@@ -66,6 +67,15 @@ func InitServer(p dataprovider.Provider) error {
 	}
 	// set the data provider
 	dataProvider = p
+	// set the dynamic dns provider
+	ddnsProvider = dataprovider.NewDdnsProvider()
+	// populate any existing users from dataprovider into ddnsprovider
+	users, err := dataProvider.GetAllUsers()
+	if err != nil {
+		return err
+	}
+	ddnsProvider.ProcessUsers(users)
+	// start http server
 	return startHTTPServer()
 }
 

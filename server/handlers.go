@@ -61,7 +61,15 @@ func handlerAuthorize(w http.ResponseWriter, req *http.Request) {
 
 	// lookup this client ip. Deny access if we don't have it
 	acl, err := dataProvider.GetACL(clientIP)
-	if err != nil || acl == nil {
+	if err != nil {
+		log.Warningf("error during dataProvider.GetACL: %v", err)
+	}
+	// check the dynamic DNS provider if acl is nil
+	if acl == nil {
+		acl = ddnsProvider.GetACL(clientIP)
+	}
+	// if neither provider can find the IP it's blocked
+	if acl == nil {
 		log.Debugf("client (%s) is unknown", clientIP)
 		w.WriteHeader(http.StatusUnauthorized)
 		return
@@ -213,6 +221,9 @@ func handlerUserAdd(w http.ResponseWriter, req *http.Request) {
 		writeJSONResponse(w, http.StatusInternalServerError, apiResponse)
 		return
 	}
+	// add this user to dynamic DNS provider
+	ddnsProvider.ProcessUser(user)
+
 	// user has been added
 	log.Infof("new user has been added: %s", user.ID)
 	writeJSONResponse(w, http.StatusOK, getUserConvert(user))
@@ -272,6 +283,8 @@ func handlerUserUpdate(w http.ResponseWriter, req *http.Request) {
 		writeJSONResponse(w, http.StatusInternalServerError, apiResponse)
 		return
 	}
+	// add this user to dynamic DNS provider
+	ddnsProvider.ProcessUser(modifiedUser)
 
 	// user has been updated
 	log.Infof("user has been updated: %s", user.ID)

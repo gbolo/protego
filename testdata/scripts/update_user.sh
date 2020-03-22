@@ -23,4 +23,5 @@ http --print=HhBb PUT ${URL}/5e8848 ADMIN-SECRET:supersecret \
   secret="password" \
   acl_allow_all:=false \
   ttl_minutes:=10 \
-  acl_allowed_hosts:='["git.fqdn","emby.fqdn"]'
+  acl_allowed_hosts:='["git.fqdn","emby.fqdn"]' \
+  dns_names:='["google.com","linuxctl.com"]'
