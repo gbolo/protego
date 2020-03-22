@@ -20,6 +20,7 @@ type Provider interface {
 	RemoveUser(u *User) error
 	GetUser(id string) (*User, error)
 	UpdateUser(u *User) error
+	GetAllUsers() ([]User, error)
 
 	// only needs a real implementation if provider does not
 	// natively support TTL

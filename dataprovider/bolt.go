@@ -180,3 +180,19 @@ func (p *BoltProvider) UpdateUser(u *User) error {
 		return e
 	})
 }
+
+func (p *BoltProvider) GetAllUsers() (users []User, err error) {
+	err = p.dbHandle.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket(userBucket)
+		c := b.Cursor()
+		for id, userBytes := c.First(); id != nil; id, userBytes = c.Next() {
+			var user User
+			err = json.Unmarshal(userBytes, &user)
+			if err == nil {
+				users = append(users, user)
+			}
+		}
+		return nil
+	})
+	return
+}

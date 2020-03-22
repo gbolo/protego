@@ -126,6 +126,15 @@ func (p *MemoryProvider) GetUser(id string) (user *User, err error) {
 	return
 }
 
+func (p *MemoryProvider) GetAllUsers() (users []User, err error) {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+	for _, user := range p.users {
+		users = append(users, user)
+	}
+	return
+}
+
 func (p *MemoryProvider) UpdateUser(u *User) error {
 	// validate the user object
 	if u == nil || len(u.ID) < 6 {
