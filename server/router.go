@@ -87,6 +87,13 @@ var routes = Routes{
 		getEndpoint("user/{user-id}"),
 		handlerUserGet,
 	},
+
+	Route{
+		"UsersGetAll",
+		"GET",
+		getEndpoint("user"),
+		handlerUserGetAll,
+	},
 }
 
 func newRouter() *mux.Router {

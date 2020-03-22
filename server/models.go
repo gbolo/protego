@@ -78,3 +78,18 @@ func getUserConvert(user *dataprovider.User) getUser {
 		TTLMinutes:      user.TTLMinutes,
 	}
 }
+
+func getAllUsersConvert(users []dataprovider.User) (getUsers []getUser) {
+	for _, user := range users {
+		getUsers = append (getUsers, getUser{
+			ID:              user.ID,
+			Enabled:         user.Enabled,
+			Description:     user.Description,
+			ACLAllowAll:     user.ACLAllowAll,
+			ACLAllowedHosts: user.ACLAllowedHosts,
+			DNSNames:        user.DNSNames,
+			TTLMinutes:      user.TTLMinutes,
+		})
+	}
+	return
+}
