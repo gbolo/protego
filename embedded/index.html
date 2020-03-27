@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Protego</title>
+    <link rel="icon" type="image/png" href="/assets/favicon.png" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.8.0/css/bulma.min.css">
+    <script defer src="https://use.fontawesome.com/releases/v5.3.1/js/all.js"></script>
+    <style>
+    .pad-right {
+      padding-right: 10px;
+    }
+    </style>
+  </head>
+  <body>
+
+
+  <section class="hero is-dark is-fullheight">
+    <header class="header">
+      <nav class="navbar">
+        <div class="container">
+          <div class="navbar-brand">
+            <a class="navbar-item has-text-white is-size-4 has-text-weight-bold" href="/">
+                <img src="/assets/protego-logo.png" class="pad-right">Protego<img>
+            </a>
+            <span role="button" tabindex="0" class="navbar-burger burger has-text-white" data-target="navbar-menu">
+              <span></span>
+              <span></span>
+              <span></span>
+            </span>
+          </div>
+          <div id="navbar-menu" class="navbar-menu">
+            <div class="navbar-end">
+                <span class="navbar-item">
+                    <a class="button is-white is-outlined" href="https://github.com/gbolo/protego">
+                        <span class="icon">
+                            <i class="fa fa-book"></i>
+                        </span>
+                        <span>Docs</span>
+                    </a>
+                </span>
+                <span class="navbar-item">
+                    <a class="button is-white is-outlined" href="/swagger">
+                        <span class="icon">
+                            <i class="fas fa-laptop-code"></i>
+                        </span>
+                        <span>Swagger</span>
+                    </a>
+                </span>
+                <span class="navbar-item">
+                    <a class="button is-white is-outlined" href="https://github.com/gbolo/protego">
+                        <span class="icon">
+                            <i class="fab fa-github"></i>
+                        </span>
+                        <span>View Source</span>
+                    </a>
+                </span>
+            </div>
+        </div>
+      </nav>
+    </header>
+
+    <div class="hero-body">
+        <div class="container has-text-centered">
+            <div class="column">
+              <div class="container has-text-centered">
+                <h1 class="title" id="title">
+                  Whitelist Your IP
+                </h1>
+                <div class="box">
+                    <div class="field is-grouped">
+                        <p class="control is-expanded">
+                            <input class="input" type="password" id="secret" placeholder="Enter your secret">
+                        </p>
+                        <p class="control">
+                            <a class="button is-dark" id="submitSecret">
+                                Submit
+                            </a>
+                        </p>
+                    </div>
+                </div>
+                <!-- <p class="subtitle">
+                  current status: unknown
+                </p> -->
+              </div>
+            </div>
+        </div>
+    </div>
+
+  </section>
+
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+  <script>
+    var submitLink = $("#submitSecret");
+    var secretInput = $("#secret");
+    var title = $("#title");
+
+    var doChallengeRequest = function() {
+      submitLink.attr("disabled", true);
+      $.ajax({
+          type: "POST",
+          dataType: "json",
+          url: '/api/v1/challenge',
+          headers: {
+            'User-Secret': $("#secret").val()
+          },
+
+          beforeSend: function(){
+              submitLink.text('Sending');
+          },
+          success: function() {
+              submitLink.text('Success');
+              submitLink.removeClass('is-dark is-danger');
+              submitLink.addClass('is-success');
+              title.text('IP has been Whitelisted')
+          },
+          error: function() {
+              submitLink.text('Failed');
+              submitLink.removeClass('is-dark is-success');
+              submitLink.addClass('is-danger');
+              title.text('Incorrect Secret')
+          },
+      });
+    }
+
+    // listen for clicks to submitSecret button
+    submitLink.on("click", doChallengeRequest);
+
+    // listen for changes to input field
+    secretInput.on("keypress", function(){
+        submitLink.attr("disabled", false);
+        submitLink.text('Submit');
+        submitLink.removeClass('is-danger is-success');
+        submitLink.addClass('is-dark');
+    });
+
+    // listen for ENTER keystroke on input field
+    secretInput.on("keyup", function(e){
+        if (e.keyCode === 13) {
+          doChallengeRequest();
+        }
+    });
+  </script>
+
+  </body>
+</html>
