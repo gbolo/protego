@@ -8,13 +8,14 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net/http"
-	"os"
-	"time"
 
-	"github.com/gbolo/protego/config"
-	"github.com/gbolo/protego/dataprovider"
-	"github.com/gorilla/handlers"
-	"github.com/gorilla/mux"
+	"github.com/gbolo/protego/pkg/asset"
+	"github.com/gbolo/protego/pkg/config"
+	"github.com/gbolo/protego/pkg/dataprovider"
+	"github.com/gbolo/protego/pkg/httpserver"
+	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/adaptor"
+	httpSwagger "github.com/gofiber/swagger"
 	"github.com/spf13/viper"
 )
 
@@ -22,13 +23,6 @@ var (
 	log          = config.GetLogger()
 	dataProvider dataprovider.Provider
 	ddnsProvider dataprovider.DdnsProvider
-
-	// set timeouts to avoid Slowloris attacks.
-	httpWriteTimeout = time.Second * 15
-	httpReadTimeout  = time.Second * 15
-	// the maximum amount of time to wait for the
-	// next request when keep-alives are enabled
-	httpIdleTimeout = time.Second * 60
 
 	// PCI compliance as of Jun 30, 2018: anything under TLS 1.1 must be disabled
 	// we bump this up to TLS 1.2 so we can support best possible ciphers
@@ -79,64 +73,81 @@ func InitServer(p dataprovider.Provider) error {
 	return startHTTPServer()
 }
 
-func startHTTPServer() (err error) {
+// setupRoutes configures all the API routes and middleware
+func setupRoutes(app *fiber.App) {
+	// API routes with versioning
+	api := app.Group("/api/v1")
 
-	// create routes
-	mux := newRouter()
+	// Version endpoint
+	api.Get("/version", handlerVersion)
 
-	// get server config
-	srv := configureHTTPServer(mux)
+	// Authorization endpoints
+	api.Get("/authorize", handlerAuthorize)
+	api.Post("/challenge", handlerChallenge)
 
-	// get TLS config
-	tlsConifig, err := configureTLS()
-	if err != nil {
-		log.Fatalf("error configuring TLS: %s", err)
-		return
-	}
-	srv.TLSConfig = &tlsConifig
+	// User management endpoints
+	api.Post("/user", handlerUserAdd)
+	api.Put("/user/:user-id", handlerUserUpdate)
+	api.Get("/user/:user-id", handlerUserGet)
+	api.Get("/user", handlerUserGetAll)
+	api.Delete("/user/:user-id", handlerUserDelete)
 
-	// start the server
-	if viper.GetBool("server.tls.enabled") {
-		// cert and key should already be configured
-		log.Infof("starting HTTP server with TLS enabled: listening on %s", srv.Addr)
-		err = srv.ListenAndServeTLS("", "")
-	} else {
-		log.Infof("starting HTTP server: listening on %s", srv.Addr)
-		err = srv.ListenAndServe()
-	}
+	// Swagger UI
+	app.Get("/swagger", func(c *fiber.Ctx) error {
+		return c.Redirect("/swagger/index.html", fiber.StatusMovedPermanently)
+	})
+	app.Get("/swagger/*", httpSwagger.HandlerDefault)
 
-	if err != nil {
-		log.Fatalf("failed to start server: %s", err)
-	}
-
-	return
+	// Serve embedded static assets (web UI)
+	// Use adaptor to convert http.FileServer to Fiber handler
+	fileServer := http.FileServer(asset.Assets)
+	app.Get("/*", adaptor.HTTPHandler(fileServer))
 }
 
-func configureHTTPServer(mux *mux.Router) (httpServer *http.Server) {
+func startHTTPServer() (err error) {
+	// create fiber app with configuration
+	app := httpserver.GetFiberApp(
+		config.AppName,
+		viper.GetBool("server.access_log"),
+		viper.GetBool("server.compression"),
+		viper.GetBool("server.enable_profiler"),
+	)
 
-	// apply standard http server settings
+	// setup routes
+	setupRoutes(app)
+
+	// get listen address
 	address := fmt.Sprintf(
 		"%s:%s",
 		viper.GetString("server.bind_address"),
 		viper.GetString("server.bind_port"),
 	)
 
-	httpServer = &http.Server{
-		Addr: address,
+	// start the server
+	if viper.GetBool("server.tls.enabled") {
+		// get TLS config
+		tlsConfig, err := configureTLS()
+		if err != nil {
+			log.Fatalf("error configuring TLS: %s", err)
+			return err
+		}
 
-		WriteTimeout: httpWriteTimeout,
-		ReadTimeout:  httpReadTimeout,
-		IdleTimeout:  httpIdleTimeout,
+		log.Infof("starting HTTP server with TLS enabled: listening on %s", address)
+		err = app.ListenTLSWithCertificate(address, tls.Certificate{})
+		// Use custom listener with TLS config
+		ln, lnErr := tls.Listen("tcp", address, &tlsConfig)
+		if lnErr != nil {
+			log.Fatalf("failed to create TLS listener: %s", lnErr)
+			return lnErr
+		}
+		err = app.Listener(ln)
+	} else {
+		log.Infof("starting HTTP server: listening on %s", address)
+		err = app.Listen(address)
 	}
 
-	// explicitly enable keep-alives
-	httpServer.SetKeepAlivesEnabled(true)
-
-	// stdout access log enable/disable
-	if viper.GetBool("server.access_log") {
-		httpServer.Handler = handlers.CombinedLoggingHandler(os.Stdout, mux)
-	} else {
-		httpServer.Handler = mux
+	if err != nil {
+		log.Fatalf("failed to start server: %s", err)
 	}
 
 	return

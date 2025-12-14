@@ -1,6 +1,6 @@
 package dataprovider
 
-import "github.com/gbolo/protego/config"
+import "github.com/gbolo/protego/pkg/config"
 
 var log = config.GetLogger()
 

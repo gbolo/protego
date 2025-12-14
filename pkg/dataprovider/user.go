@@ -164,7 +164,7 @@ func (u *User) RemoveIp(ip string) {
 	if u.CheckIp(ip) {
 		for index, thisIp := range u.IPs {
 			if strings.EqualFold(thisIp, ip) {
-				u.ACLAllowedHosts = append(u.IPs[:index], u.IPs[index+1:]...)
+				u.IPs = append(u.IPs[:index], u.IPs[index+1:]...)
 				return
 			}
 		}

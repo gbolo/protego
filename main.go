@@ -3,9 +3,9 @@ package main
 import (
 	"strings"
 
-	"github.com/gbolo/protego/config"
-	"github.com/gbolo/protego/dataprovider"
-	"github.com/gbolo/protego/server"
+	"github.com/gbolo/protego/pkg/config"
+	"github.com/gbolo/protego/pkg/dataprovider"
+	"github.com/gbolo/protego/pkg/server"
 	"github.com/spf13/viper"
 	_ "github.com/gbolo/protego/docs"
 )

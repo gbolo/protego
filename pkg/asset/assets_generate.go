@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gbolo/protego/config"
+	"github.com/gbolo/protego/pkg/config"
 	"github.com/prometheus/alertmanager/pkg/modtimevfs"
 	"github.com/shurcooL/vfsgen"
 )

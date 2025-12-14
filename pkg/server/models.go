@@ -1,6 +1,6 @@
 package server
 
-import "github.com/gbolo/protego/dataprovider"
+import "github.com/gbolo/protego/pkg/dataprovider"
 
 type addUser struct {
 	// Determines if this User is enabled

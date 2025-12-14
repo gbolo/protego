@@ -63,6 +63,12 @@ func (p *MemoryProvider) GetACL(ip string) (acl *ACL, err error) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 	if aclFound, ok := p.acls[ip]; ok {
+		// Check if ACL is expired
+		if aclFound.IsExpired() {
+			log.Infof("user IP (%s) TTL has expired. Removing from database", ip)
+			delete(p.acls, ip)
+			return nil, nil
+		}
 		acl = &aclFound
 	}
 	return

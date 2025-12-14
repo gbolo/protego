@@ -1,15 +1,12 @@
 package server
 
 import (
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"net/http"
 	"time"
 
 	validate "github.com/asaskevich/govalidator"
-	"github.com/gbolo/protego/dataprovider"
-	"github.com/gorilla/mux"
+	"github.com/gbolo/protego/pkg/dataprovider"
+	"github.com/gofiber/fiber/v2"
 	"github.com/spf13/viper"
 )
 
@@ -31,8 +28,8 @@ import (
 // @Produce  json
 // @Success 200 {object} version
 // @Router /version [get]
-func handlerVersion(w http.ResponseWriter, req *http.Request) {
-	writeJSONResponse(w, http.StatusOK, version{"v0.1-alpha", "git-30b8019"})
+func handlerVersion(c *fiber.Ctx) error {
+	return c.Status(fiber.StatusOK).JSON(version{"v0.1-alpha", "git-30b8019"})
 }
 
 // handlerAuthorize godoc
@@ -45,18 +42,17 @@ func handlerVersion(w http.ResponseWriter, req *http.Request) {
 // @Failure 401 "unauthorized - user IP is unknown or not permitted to access this host"
 // @Router /authorize [get]
 // this endpoint determines whether or not the client is allowed to access the resource
-func handlerAuthorize(w http.ResponseWriter, req *http.Request) {
+func handlerAuthorize(c *fiber.Ctx) error {
 	// determine the client's real IP.
 	// the proxy MUST set the http header X-Real-IP.
 	// *NOTE* for security reasons, the proxy should set this itself and ignore any value the client may have passed
 	// TODO: maybe add support for X-Forwarded-For list
-	clientIP := req.Header.Get("X-Real-IP")
+	clientIP := c.Get("X-Real-IP")
 	if !validate.IsIP(clientIP) {
 		log.Errorf("X-Real-IP is either set incorrectly or missing! DENYING ACCESS")
-		w.WriteHeader(http.StatusUnauthorized)
 		// additional logging for debug
 		log.Debugf("X-Real-IP is of length %d with value: %s", len(clientIP), clientIP)
-		return
+		return c.SendStatus(fiber.StatusUnauthorized)
 	}
 
 	// lookup this client ip. Deny access if we don't have it
@@ -71,26 +67,23 @@ func handlerAuthorize(w http.ResponseWriter, req *http.Request) {
 	// if neither provider can find the IP it's blocked
 	if acl == nil {
 		log.Debugf("client (%s) is unknown", clientIP)
-		w.WriteHeader(http.StatusUnauthorized)
-		return
+		return c.SendStatus(fiber.StatusUnauthorized)
 	}
 
 	// the client IP is in our database, now check what hosts it can access
 	if acl.AllowAll {
 		log.Debugf("client (%s) has ALLOW_ALL privileges", clientIP)
-		w.WriteHeader(http.StatusOK)
-		return
+		return c.SendStatus(fiber.StatusOK)
 	}
 	log.Debugf("client host acl: %v", acl.AllowedHosts)
-	if acl.CheckHost(req.Host) {
-		log.Debugf("client (%s) ALLOWED access to host %s", clientIP, req.Host)
-		w.WriteHeader(http.StatusOK)
-		return
+	if acl.CheckHost(c.Hostname()) {
+		log.Debugf("client (%s) ALLOWED access to host %s", clientIP, c.Hostname())
+		return c.SendStatus(fiber.StatusOK)
 	}
 
 	// by default we deny everything
-	log.Debugf("client (%s) DENIED access to host %s", clientIP, req.Host)
-	w.WriteHeader(http.StatusUnauthorized)
+	log.Debugf("client (%s) DENIED access to host %s", clientIP, c.Hostname())
+	return c.SendStatus(fiber.StatusUnauthorized)
 }
 
 // handlerChallenge godoc
@@ -105,42 +98,38 @@ func handlerAuthorize(w http.ResponseWriter, req *http.Request) {
 // @Failure 401 "unauthorized: the user secret is incorrect or the user is disabled" {object} errorResponse
 // @Failure 500 "server could not process the request" {object} errorResponse
 // @Router /challenge [post]
-func handlerChallenge(w http.ResponseWriter, req *http.Request) {
+func handlerChallenge(c *fiber.Ctx) error {
 	// determine the actualUser's real IP.
 	// the proxy MUST set the http header X-Real-IP.
 	// *NOTE* for security reasons, the proxy should set this itself and ignore any value the client may have passed
 	// TODO: maybe add support for X-Forwarded-For list
-	clientIP := req.Header.Get("X-Real-IP")
+	clientIP := c.Get("X-Real-IP")
 	if !validate.IsIP(clientIP) {
 		log.Errorf("X-Real-IP is either set incorrectly or missing! DENYING ACCESS")
-		writeJSONResponse(w, http.StatusBadRequest, errorResponse{"Unable to properly determine user's IP address"})
 		// additional logging for debug
 		log.Debugf("X-Real-IP is of length %d with value: %s", len(clientIP), clientIP)
-		return
+		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"Unable to properly determine user's IP address"})
 	}
 
 	// now we check if the actualUser provided a secret
-	clientSecret := req.Header.Get("User-Secret")
+	clientSecret := c.Get("User-Secret")
 	user, err := dataprovider.NewUser(clientSecret, "")
 	if err == dataprovider.ErrSecretLength {
 		log.Infof("user %s was denied due to challenge failure", clientIP)
-		writeJSONResponse(w, http.StatusUnauthorized, errorResponse{"User-Secret is incorrect"})
-		return
+		return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"User-Secret is incorrect"})
 	}
 
 	// check if this actualUser exists
 	actualUser, err := dataProvider.GetUser(user.ID)
 	if actualUser == nil || err != nil {
 		log.Infof("user %s was denied due to incorrect secret", clientIP)
-		writeJSONResponse(w, http.StatusUnauthorized, errorResponse{"unable to find user"})
-		return
+		return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"unable to find user"})
 	}
 
 	// deny the actualUser if it is disabled
 	if !actualUser.Enabled {
 		log.Infof("user %s was denied due to being disabled", clientIP)
-		writeJSONResponse(w, http.StatusUnauthorized, errorResponse{"this user is currently disabled"})
-		return
+		return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"this user is currently disabled"})
 	}
 
 	// add this actualUser's IP to whitelist
@@ -156,8 +145,7 @@ func handlerChallenge(w http.ResponseWriter, req *http.Request) {
 	err = dataProvider.AddIp(clientIP, &acl)
 	if err != nil {
 		log.Errorf("unable to add ACL to DB: %s", err)
-		writeJSONResponse(w, http.StatusInternalServerError, errorResponse{"there was an error handling this request"})
-		return
+		return c.Status(fiber.StatusInternalServerError).JSON(errorResponse{"there was an error handling this request"})
 	}
 
 	// successful response
@@ -168,7 +156,7 @@ func handlerChallenge(w http.ResponseWriter, req *http.Request) {
 		IpAddress: clientIP,
 	}
 	apiResponse.ACL = acl
-	writeJSONResponse(w, http.StatusAccepted, apiResponse)
+	return c.Status(fiber.StatusAccepted).JSON(apiResponse)
 }
 
 
@@ -182,29 +170,22 @@ func handlerChallenge(w http.ResponseWriter, req *http.Request) {
 // @Param user body server.addUser true "Add User"
 // @Success 200 {object} server.getUser
 // @Router /user [post]
-func handlerUserAdd(w http.ResponseWriter, req *http.Request) {
+func handlerUserAdd(c *fiber.Ctx) error {
 	// validate authorization header if enabled
-	if viper.GetString("admin.secret") != "" && req.Header.Get("Admin-Secret") != viper.GetString("admin.secret") {
+	if viper.GetString("admin.secret") != "" && c.Get("Admin-Secret") != viper.GetString("admin.secret") {
 		log.Warningf("admin credentials rejected")
-		writeJSONResponse(w, http.StatusUnauthorized, errorResponse{"admin credentials rejected"})
-		return
+		return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"admin credentials rejected"})
 	}
 
 	// try to read the body
-	body, err := ioutil.ReadAll(req.Body)
-	if err != nil {
-		apiResponse := errorResponse{"Bad request. Cannot read request body."}
-		writeJSONResponse(w, http.StatusBadRequest, apiResponse)
-		return
-	}
+	body := c.Body()
 
 	// try to unmarshal the body into a valid user
 	user, err := dataprovider.DecodeUser(body)
 	if err != nil || user == nil {
 		log.Errorf("unable to decode user: %v", err)
 		apiResponse := errorResponse{"Bad request: " + err.Error()}
-		writeJSONResponse(w, http.StatusBadRequest, apiResponse)
-		return
+		return c.Status(fiber.StatusBadRequest).JSON(apiResponse)
 	}
 
 	// add the user to the backend now
@@ -213,20 +194,18 @@ func handlerUserAdd(w http.ResponseWriter, req *http.Request) {
 	case err == dataprovider.ErrUserExists:
 		log.Errorf("couldn't add new user: %v", err)
 		apiResponse := errorResponse{fmt.Sprintf("Client already exists (ID: %s). Try Modifying it", user.ID)}
-		writeJSONResponse(w, http.StatusConflict, apiResponse)
-		return
+		return c.Status(fiber.StatusConflict).JSON(apiResponse)
 	case err != nil:
 		log.Errorf("couldn't add new user: %v", err)
 		apiResponse := errorResponse{"Could not add user"}
-		writeJSONResponse(w, http.StatusInternalServerError, apiResponse)
-		return
+		return c.Status(fiber.StatusInternalServerError).JSON(apiResponse)
 	}
 	// add this user to dynamic DNS provider
 	ddnsProvider.ProcessUser(user)
 
 	// user has been added
 	log.Infof("new user has been added: %s", user.ID)
-	writeJSONResponse(w, http.StatusOK, getUserConvert(user))
+	return c.Status(fiber.StatusOK).JSON(getUserConvert(user))
 }
 
 // handlerUserUpdate godoc
@@ -239,40 +218,31 @@ func handlerUserAdd(w http.ResponseWriter, req *http.Request) {
 // @Param user body server.modifyUser true "Update User"
 // @Success 200 {object} server.getUser
 // @Router /user/{id} [put]
-func handlerUserUpdate(w http.ResponseWriter, req *http.Request) {
+func handlerUserUpdate(c *fiber.Ctx) error {
 	// validate authorization header if enabled
 	// TODO: the user should also be able to modify itself
-	if viper.GetString("admin.secret") != "" && req.Header.Get("Admin-Secret") != viper.GetString("admin.secret") {
+	if viper.GetString("admin.secret") != "" && c.Get("Admin-Secret") != viper.GetString("admin.secret") {
 		log.Warningf("admin credentials rejected")
-		writeJSONResponse(w, http.StatusUnauthorized, errorResponse{"admin credentials rejected"})
-		return
+		return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"admin credentials rejected"})
 	}
 
 	// get vars from request to determine if user id was specified
-	vars := mux.Vars(req)
-	userId := vars["user-id"]
+	userId := c.Params("user-id")
 	user, err := dataProvider.GetUser(userId)
 	if user == nil || err != nil {
 		log.Warningf("user was not found: %s", userId)
-		writeJSONResponse(w, http.StatusBadRequest, errorResponse{"user was not found"})
-		return
+		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"user was not found"})
 	}
 
 	// try to read the body
-	body, err := ioutil.ReadAll(req.Body)
-	if err != nil {
-		apiResponse := errorResponse{"Bad request. Cannot read request body."}
-		writeJSONResponse(w, http.StatusBadRequest, apiResponse)
-		return
-	}
+	body := c.Body()
 
 	// try to unmarshal the body into a valid user
 	modifiedUser, err := dataprovider.DecodeUser(body)
 	if err != nil || user == nil {
 		log.Errorf("unable to decode user: %v", err)
 		apiResponse := errorResponse{"Bad request: " + err.Error()}
-		writeJSONResponse(w, http.StatusBadRequest, apiResponse)
-		return
+		return c.Status(fiber.StatusBadRequest).JSON(apiResponse)
 	}
 
 	// add the user to the backend now
@@ -280,15 +250,14 @@ func handlerUserUpdate(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		log.Errorf("could not update user: %v", err)
 		apiResponse := errorResponse{"Could not update user"}
-		writeJSONResponse(w, http.StatusInternalServerError, apiResponse)
-		return
+		return c.Status(fiber.StatusInternalServerError).JSON(apiResponse)
 	}
 	// add this user to dynamic DNS provider
 	ddnsProvider.ProcessUser(modifiedUser)
 
 	// user has been updated
 	log.Infof("user has been updated: %s", user.ID)
-	writeJSONResponse(w, http.StatusOK, getUserConvert(modifiedUser))
+	return c.Status(fiber.StatusOK).JSON(getUserConvert(modifiedUser))
 }
 
 // handlerUserGet godoc
@@ -300,25 +269,22 @@ func handlerUserUpdate(w http.ResponseWriter, req *http.Request) {
 // @Param id path string true "User ID"
 // @Success 200 {object} server.getUser
 // @Router /user/{id} [get]
-func handlerUserGet(w http.ResponseWriter, req *http.Request) {
+func handlerUserGet(c *fiber.Ctx) error {
 	// validate authorization header if enabled
 	// TODO: the user should also be able to modify itself
-	if viper.GetString("admin.secret") != "" && req.Header.Get("Admin-Secret") != viper.GetString("admin.secret") {
+	if viper.GetString("admin.secret") != "" && c.Get("Admin-Secret") != viper.GetString("admin.secret") {
 		log.Warningf("admin credentials rejected")
-		writeJSONResponse(w, http.StatusUnauthorized, errorResponse{"admin credentials rejected"})
-		return
+		return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"admin credentials rejected"})
 	}
 
 	// get vars from request to determine if user id was specified
-	vars := mux.Vars(req)
-	userId := vars["user-id"]
+	userId := c.Params("user-id")
 	user, err := dataProvider.GetUser(userId)
 	if user == nil || err != nil {
 		log.Warningf("user was not found: %s", userId)
-		writeJSONResponse(w, http.StatusBadRequest, errorResponse{"user was not found"})
-		return
+		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"user was not found"})
 	}
-	writeJSONResponse(w, http.StatusOK, getUserConvert(user))
+	return c.Status(fiber.StatusOK).JSON(getUserConvert(user))
 }
 
 // handlerUserGetAll godoc
@@ -329,28 +295,24 @@ func handlerUserGet(w http.ResponseWriter, req *http.Request) {
 // @Param Admin-Secret header string true "Admin Secret"
 // @Success 200 {array} server.getUser
 // @Router /user [get]
-func handlerUserGetAll(w http.ResponseWriter, req *http.Request) {
+func handlerUserGetAll(c *fiber.Ctx) error {
 	// validate authorization header if enabled
 	// TODO: the user should also be able to modify itself
-	if viper.GetString("admin.secret") != "" && req.Header.Get("Admin-Secret") != viper.GetString("admin.secret") {
+	if viper.GetString("admin.secret") != "" && c.Get("Admin-Secret") != viper.GetString("admin.secret") {
 		log.Warningf("admin credentials rejected")
-		writeJSONResponse(w, http.StatusUnauthorized, errorResponse{"admin credentials rejected"})
-		return
+		return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"admin credentials rejected"})
 	}
 
 	users, err := dataProvider.GetAllUsers()
 	if err != nil {
 		log.Warningf("could not get all users: %v", err)
-		writeJSONResponse(w, http.StatusServiceUnavailable, errorResponse{"could not retrieve all users"})
-		return
+		return c.Status(fiber.StatusServiceUnavailable).JSON(errorResponse{"could not retrieve all users"})
 	}
-	// TODO: writeJSONResponse cannot properly handle an empty slice
+	// Fiber handles empty slices properly
 	if len(users) == 0 {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`[]`))
-		return
+		return c.Status(fiber.StatusOK).JSON([]getUser{})
 	}
-	writeJSONResponse(w, http.StatusOK, getAllUsersConvert(users))
+	return c.Status(fiber.StatusOK).JSON(getAllUsersConvert(users))
 }
 
 // handlerUserDelete godoc
@@ -362,39 +324,27 @@ func handlerUserGetAll(w http.ResponseWriter, req *http.Request) {
 // @Param id path string true "User ID"
 // @Success 200 {object} server.getUser
 // @Router /user/{id} [delete]
-func handlerUserDelete(w http.ResponseWriter, req *http.Request) {
+func handlerUserDelete(c *fiber.Ctx) error {
 	// validate authorization header if enabled
-	if viper.GetString("admin.secret") != "" && req.Header.Get("Admin-Secret") != viper.GetString("admin.secret") {
+	if viper.GetString("admin.secret") != "" && c.Get("Admin-Secret") != viper.GetString("admin.secret") {
 		log.Warningf("admin credentials rejected")
-		writeJSONResponse(w, http.StatusUnauthorized, errorResponse{"admin credentials rejected"})
-		return
+		return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"admin credentials rejected"})
 	}
 
 	// get vars from request to determine if environment id was specified
-	vars := mux.Vars(req)
-	userId := vars["user-id"]
+	userId := c.Params("user-id")
 	user, err := dataProvider.GetUser(userId)
 	if user == nil || err != nil {
 		log.Warningf("user was not found: %s", userId)
-		writeJSONResponse(w, http.StatusBadRequest, errorResponse{"user was not found"})
-		return
+		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"user was not found"})
 	}
 
 	err = dataProvider.RemoveUser(user)
 	if err != nil {
 		log.Warningf("unable to remove client %s: %v", userId, err)
-		writeJSONResponse(w, http.StatusInternalServerError, errorResponse{"unable to remove client"})
-		return
+		return c.Status(fiber.StatusInternalServerError).JSON(errorResponse{"unable to remove client"})
 	}
 	// user has been removed
 	log.Infof("user has been removed: %s", userId)
-	writeJSONResponse(w, http.StatusOK, getUserConvert(user))
-}
-
-// wrapper for json responses
-func writeJSONResponse(w http.ResponseWriter, status int, body interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	b, _ := json.MarshalIndent(body, "", "  ")
-	w.Write(append(b, []byte("\n")...))
+	return c.Status(fiber.StatusOK).JSON(getUserConvert(user))
 }
