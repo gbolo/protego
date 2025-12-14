@@ -1,9 +1,5 @@
 package dataprovider
 
-import "github.com/gbolo/protego/pkg/config"
-
-var log = config.GetLogger()
-
 // Provider interface that data providers must implement.
 type Provider interface {
 	InitializeDatabase() error

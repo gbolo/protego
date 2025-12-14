@@ -7,6 +7,7 @@ import (
 
 	validate "github.com/asaskevich/govalidator"
 	"github.com/boltdb/bolt"
+	"github.com/gbolo/protego/pkg/log"
 	"github.com/spf13/viper"
 )
 

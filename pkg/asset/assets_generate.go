@@ -1,3 +1,4 @@
+//go:build ignore
 // +build ignore
 
 // this main needs to run every time the physical assets on disk change
@@ -7,12 +8,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gbolo/protego/pkg/config"
+	"github.com/gbolo/protego/pkg/log"
 	"github.com/prometheus/alertmanager/pkg/modtimevfs"
 	"github.com/shurcooL/vfsgen"
 )
-
-var log = config.GetLogger()
 
 func main() {
 	// ensure that timestamps of files never change so that `vfsgen` generate becomes deterministic

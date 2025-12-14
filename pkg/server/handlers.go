@@ -6,6 +6,7 @@ import (
 
 	validate "github.com/asaskevich/govalidator"
 	"github.com/gbolo/protego/pkg/dataprovider"
+	"github.com/gbolo/protego/pkg/log"
 	"github.com/gofiber/fiber/v2"
 	"github.com/spf13/viper"
 )
@@ -19,7 +20,6 @@ import (
 // @license.name MIT
 // @license.url https://github.com/gbolo/protego/blob/master/LICENSE
 // @BasePath /api/v1
-
 
 // handlerVersion godoc
 // @Summary Version information
@@ -58,7 +58,7 @@ func handlerAuthorize(c *fiber.Ctx) error {
 	// lookup this client ip. Deny access if we don't have it
 	acl, err := dataProvider.GetACL(clientIP)
 	if err != nil {
-		log.Warningf("error during dataProvider.GetACL: %v", err)
+		log.Warnf("error during dataProvider.GetACL: %v", err)
 	}
 	// check the dynamic DNS provider if acl is nil
 	if acl == nil {
@@ -159,7 +159,6 @@ func handlerChallenge(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusAccepted).JSON(apiResponse)
 }
 
-
 // handlerUserAdd godoc
 // @Summary Add a new User
 // @Description add by json user
@@ -173,7 +172,7 @@ func handlerChallenge(c *fiber.Ctx) error {
 func handlerUserAdd(c *fiber.Ctx) error {
 	// validate authorization header if enabled
 	if viper.GetString("admin.secret") != "" && c.Get("Admin-Secret") != viper.GetString("admin.secret") {
-		log.Warningf("admin credentials rejected")
+		log.Warnf("admin credentials rejected")
 		return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"admin credentials rejected"})
 	}
 
@@ -222,7 +221,7 @@ func handlerUserUpdate(c *fiber.Ctx) error {
 	// validate authorization header if enabled
 	// TODO: the user should also be able to modify itself
 	if viper.GetString("admin.secret") != "" && c.Get("Admin-Secret") != viper.GetString("admin.secret") {
-		log.Warningf("admin credentials rejected")
+		log.Warnf("admin credentials rejected")
 		return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"admin credentials rejected"})
 	}
 
@@ -230,7 +229,7 @@ func handlerUserUpdate(c *fiber.Ctx) error {
 	userId := c.Params("user-id")
 	user, err := dataProvider.GetUser(userId)
 	if user == nil || err != nil {
-		log.Warningf("user was not found: %s", userId)
+		log.Warnf("user was not found: %s", userId)
 		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"user was not found"})
 	}
 
@@ -273,7 +272,7 @@ func handlerUserGet(c *fiber.Ctx) error {
 	// validate authorization header if enabled
 	// TODO: the user should also be able to modify itself
 	if viper.GetString("admin.secret") != "" && c.Get("Admin-Secret") != viper.GetString("admin.secret") {
-		log.Warningf("admin credentials rejected")
+		log.Warnf("admin credentials rejected")
 		return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"admin credentials rejected"})
 	}
 
@@ -281,7 +280,7 @@ func handlerUserGet(c *fiber.Ctx) error {
 	userId := c.Params("user-id")
 	user, err := dataProvider.GetUser(userId)
 	if user == nil || err != nil {
-		log.Warningf("user was not found: %s", userId)
+		log.Warnf("user was not found: %s", userId)
 		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"user was not found"})
 	}
 	return c.Status(fiber.StatusOK).JSON(getUserConvert(user))
@@ -299,13 +298,13 @@ func handlerUserGetAll(c *fiber.Ctx) error {
 	// validate authorization header if enabled
 	// TODO: the user should also be able to modify itself
 	if viper.GetString("admin.secret") != "" && c.Get("Admin-Secret") != viper.GetString("admin.secret") {
-		log.Warningf("admin credentials rejected")
+		log.Warnf("admin credentials rejected")
 		return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"admin credentials rejected"})
 	}
 
 	users, err := dataProvider.GetAllUsers()
 	if err != nil {
-		log.Warningf("could not get all users: %v", err)
+		log.Warnf("could not get all users: %v", err)
 		return c.Status(fiber.StatusServiceUnavailable).JSON(errorResponse{"could not retrieve all users"})
 	}
 	// Fiber handles empty slices properly
@@ -327,7 +326,7 @@ func handlerUserGetAll(c *fiber.Ctx) error {
 func handlerUserDelete(c *fiber.Ctx) error {
 	// validate authorization header if enabled
 	if viper.GetString("admin.secret") != "" && c.Get("Admin-Secret") != viper.GetString("admin.secret") {
-		log.Warningf("admin credentials rejected")
+		log.Warnf("admin credentials rejected")
 		return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"admin credentials rejected"})
 	}
 
@@ -335,13 +334,13 @@ func handlerUserDelete(c *fiber.Ctx) error {
 	userId := c.Params("user-id")
 	user, err := dataProvider.GetUser(userId)
 	if user == nil || err != nil {
-		log.Warningf("user was not found: %s", userId)
+		log.Warnf("user was not found: %s", userId)
 		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"user was not found"})
 	}
 
 	err = dataProvider.RemoveUser(user)
 	if err != nil {
-		log.Warningf("unable to remove client %s: %v", userId, err)
+		log.Warnf("unable to remove client %s: %v", userId, err)
 		return c.Status(fiber.StatusInternalServerError).JSON(errorResponse{"unable to remove client"})
 	}
 	// user has been removed

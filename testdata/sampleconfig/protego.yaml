@@ -1,3 +1,20 @@
+# logger options
+log:
+  # log level: debug, info, warn, error, fatal
+  level: debug
+  # log encoding: console, json
+  encoding: console
+  # enable colored output (only works with console encoding)
+  enable_color: true
+  # enable development mode (adds more details)
+  dev_mode: false
+  # disable log sampling (logs every message, no rate limiting)
+  disable_sampling: false
+  # disable caller information in logs
+  disable_caller: false
+  # disable stack traces
+  disable_stacktrace: true
+
 # database options
 db:
   # provider options are: bolt, memory

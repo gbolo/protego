@@ -100,4 +100,3 @@ func addFiberMiddlewareMetrics(app *fiber.App) {
 func addFiberMiddlewareFavicon(app *fiber.App) {
 	app.Use(favicon.New())
 }
-

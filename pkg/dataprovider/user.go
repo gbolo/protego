@@ -27,23 +27,23 @@ var (
 // it notices that the DNS names resolves differently.
 type User struct {
 	// Determines if this User is enabled
-	Enabled         bool     `json:"enabled" example:"true"`
+	Enabled bool `json:"enabled" example:"true"`
 	// A brief description of this User
-	Description     string   `json:"description" example:"Cloud Strife"`
+	Description string `json:"description" example:"Cloud Strife"`
 	// A unique identifier for this User
-	ID              string   `json:"id" example:"5e8848"`
+	ID string `json:"id" example:"5e8848"`
 	// This secret is used as a challenge to whitelist a User's IP
-	Secret          string   `json:"secret,omitempty" example:"supersecret"`
+	Secret string `json:"secret,omitempty" example:"supersecret"`
 	// Determines if this User is allowed to access ALL resources
-	ACLAllowAll     bool     `json:"acl_allow_all" example:"false"`
+	ACLAllowAll bool `json:"acl_allow_all" example:"false"`
 	// A list of hosts (FQDN) this User is allowed to access
 	ACLAllowedHosts []string `json:"acl_allowed_hosts" example:"git.example.com,wiki.example.com"`
 	// A list of DNS names that resolve this User's IPs which get whitelisted automatically without a challenge.
-	DNSNames        []string `json:"dns_names" example:"myhome.no-ip.info"`
+	DNSNames []string `json:"dns_names" example:"myhome.no-ip.info"`
 	// Represents the number of minutes this User's IP is whitelisted for after a successful challenge
-	TTLMinutes      int      `json:"ttl_minutes" example:"60"`
+	TTLMinutes int `json:"ttl_minutes" example:"60"`
 	// Keeps track of IPs associated with this User
-	IPs             []string `json:"ip_addresses" example:"1.1.1.1,1.1.1.2"`
+	IPs []string `json:"ip_addresses" example:"1.1.1.1,1.1.1.2"`
 }
 
 // NewUser returns a User with safe defaults

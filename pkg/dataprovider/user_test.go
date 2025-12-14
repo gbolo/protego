@@ -336,4 +336,3 @@ func TestDecodeUser(t *testing.T) {
 		t.Error("Expected error for short secret")
 	}
 }
-

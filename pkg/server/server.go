@@ -1,3 +1,4 @@
+//go:build go1.8
 // +build go1.8
 
 // enforce go 1.8+ just so we can support X25519 curve :)
@@ -13,6 +14,7 @@ import (
 	"github.com/gbolo/protego/pkg/config"
 	"github.com/gbolo/protego/pkg/dataprovider"
 	"github.com/gbolo/protego/pkg/httpserver"
+	"github.com/gbolo/protego/pkg/log"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/adaptor"
 	httpSwagger "github.com/gofiber/swagger"
@@ -20,7 +22,6 @@ import (
 )
 
 var (
-	log          = config.GetLogger()
 	dataProvider dataprovider.Provider
 	ddnsProvider dataprovider.DdnsProvider
 

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	validate "github.com/asaskevich/govalidator"
+	"github.com/gbolo/protego/pkg/log"
 )
 
 type DdnsProvider struct {
@@ -88,7 +89,7 @@ func (p *DdnsProvider) updateACLs() {
 		if len(ips) > 0 {
 			// we ONLY use the first IP address, and ignore everything else
 			if len(ips) > 1 {
-				log.Warningf("the following dns lookup (%s) resulted in more than one (%d) IPs. Only using the first one %s", fqdn, len(ips), ips[0])
+				log.Warnf("the following dns lookup (%s) resulted in more than one (%d) IPs. Only using the first one %s", fqdn, len(ips), ips[0])
 			}
 			acls[ips[0].String()] = acl
 		}
@@ -112,7 +113,7 @@ func (p *DdnsProvider) daemonize() {
 			p.updateACLs()
 			log.Debugf("periodic update for DNS based ACLs completed")
 		case <-p.stopSignal:
-			log.Warning("stop signal received, DNS based ACLs will stop being updated.")
+			log.Warn("stop signal received, DNS based ACLs will stop being updated.")
 			return
 		}
 	}

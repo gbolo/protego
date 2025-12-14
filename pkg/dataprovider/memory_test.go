@@ -22,7 +22,7 @@ func TestMemoryProvider_InitializeDatabase(t *testing.T) {
 
 func TestMemoryProvider_CheckAvailability(t *testing.T) {
 	provider, _ := NewMemoryProvider()
-	
+
 	err := provider.CheckAvailability()
 	if err != nil {
 		t.Errorf("CheckAvailability() error = %v", err)
@@ -31,9 +31,9 @@ func TestMemoryProvider_CheckAvailability(t *testing.T) {
 
 func TestMemoryProvider_AddUser(t *testing.T) {
 	provider, _ := NewMemoryProvider()
-	
+
 	user, _ := NewUser("testsecret123", "Test User")
-	
+
 	err := provider.AddUser(user)
 	if err != nil {
 		t.Errorf("AddUser() error = %v", err)
@@ -54,9 +54,9 @@ func TestMemoryProvider_AddUser(t *testing.T) {
 
 func TestMemoryProvider_AddUser_Duplicate(t *testing.T) {
 	provider, _ := NewMemoryProvider()
-	
+
 	user, _ := NewUser("testsecret123", "Test User")
-	
+
 	// Add user first time
 	err := provider.AddUser(user)
 	if err != nil {
@@ -72,7 +72,7 @@ func TestMemoryProvider_AddUser_Duplicate(t *testing.T) {
 
 func TestMemoryProvider_GetUser(t *testing.T) {
 	provider, _ := NewMemoryProvider()
-	
+
 	user, _ := NewUser("testsecret123", "Test User")
 	provider.AddUser(user)
 
@@ -100,7 +100,7 @@ func TestMemoryProvider_GetUser(t *testing.T) {
 
 func TestMemoryProvider_UpdateUser(t *testing.T) {
 	provider, _ := NewMemoryProvider()
-	
+
 	user, _ := NewUser("testsecret123", "Original Description")
 	user.ACLAllowAll = false
 	provider.AddUser(user)
@@ -130,7 +130,7 @@ func TestMemoryProvider_UpdateUser(t *testing.T) {
 
 func TestMemoryProvider_UpdateUser_NonExistent(t *testing.T) {
 	provider, _ := NewMemoryProvider()
-	
+
 	user, _ := NewUser("testsecret123", "Test User")
 
 	err := provider.UpdateUser(user)
@@ -141,7 +141,7 @@ func TestMemoryProvider_UpdateUser_NonExistent(t *testing.T) {
 
 func TestMemoryProvider_RemoveUser(t *testing.T) {
 	provider, _ := NewMemoryProvider()
-	
+
 	user, _ := NewUser("testsecret123", "Test User")
 	provider.AddUser(user)
 
@@ -187,7 +187,7 @@ func TestMemoryProvider_GetAllUsers(t *testing.T) {
 
 func TestMemoryProvider_AddIp(t *testing.T) {
 	provider, _ := NewMemoryProvider()
-	
+
 	testIP := "192.168.1.1"
 	acl := &ACL{
 		AllowAll:     true,
@@ -214,7 +214,7 @@ func TestMemoryProvider_AddIp(t *testing.T) {
 
 func TestMemoryProvider_AddIp_Invalid(t *testing.T) {
 	provider, _ := NewMemoryProvider()
-	
+
 	acl := &ACL{
 		AllowAll: true,
 	}
@@ -227,7 +227,7 @@ func TestMemoryProvider_AddIp_Invalid(t *testing.T) {
 
 func TestMemoryProvider_GetACL(t *testing.T) {
 	provider, _ := NewMemoryProvider()
-	
+
 	testIP := "192.168.1.1"
 	acl := &ACL{
 		AllowAll:     false,
@@ -262,7 +262,7 @@ func TestMemoryProvider_GetACL(t *testing.T) {
 
 func TestMemoryProvider_GetACL_Expired(t *testing.T) {
 	provider, _ := NewMemoryProvider()
-	
+
 	testIP := "192.168.1.1"
 	expiredTime := time.Now().Add(-1 * time.Hour)
 	acl := &ACL{
@@ -291,7 +291,7 @@ func TestMemoryProvider_GetACL_Expired(t *testing.T) {
 
 func TestMemoryProvider_UpdateACL(t *testing.T) {
 	provider, _ := NewMemoryProvider()
-	
+
 	testIP := "192.168.1.1"
 	acl := &ACL{
 		AllowAll:     false,
@@ -321,7 +321,7 @@ func TestMemoryProvider_UpdateACL(t *testing.T) {
 
 func TestMemoryProvider_UpdateACL_NonExistent(t *testing.T) {
 	provider, _ := NewMemoryProvider()
-	
+
 	acl := &ACL{
 		AllowAll: true,
 	}
@@ -334,7 +334,7 @@ func TestMemoryProvider_UpdateACL_NonExistent(t *testing.T) {
 
 func TestMemoryProvider_RemoveIp(t *testing.T) {
 	provider, _ := NewMemoryProvider()
-	
+
 	testIP := "192.168.1.1"
 	acl := &ACL{
 		AllowAll: true,
@@ -356,10 +356,10 @@ func TestMemoryProvider_RemoveIp(t *testing.T) {
 
 func TestMemoryProvider_Concurrency(t *testing.T) {
 	provider, _ := NewMemoryProvider()
-	
+
 	// Test concurrent access
 	done := make(chan bool)
-	
+
 	// Concurrent writes
 	for i := 0; i < 10; i++ {
 		go func(id int) {
@@ -380,4 +380,3 @@ func TestMemoryProvider_Concurrency(t *testing.T) {
 		t.Errorf("Expected 10 users after concurrent writes, got %d", len(users))
 	}
 }
-

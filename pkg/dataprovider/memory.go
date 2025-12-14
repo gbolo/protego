@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	validate "github.com/asaskevich/govalidator"
+	"github.com/gbolo/protego/pkg/log"
 )
 
 // MemoryProvider implements Provider in memory
@@ -24,7 +25,7 @@ func (p *MemoryProvider) InitializeDatabase() (err error) {
 	p.users = make(map[string]User)
 	p.acls = make(map[string]ACL)
 	p.lock = new(sync.Mutex)
-	log.Warningf("in-memory data provider has been initialized. This setting should only be used for testing.")
+	log.Warnf("in-memory data provider has been initialized. This setting should only be used for testing.")
 	return nil
 }
 

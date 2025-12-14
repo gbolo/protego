@@ -295,4 +295,3 @@ func TestACL_AllowAllOverride(t *testing.T) {
 func timePtr(t time.Time) *time.Time {
 	return &t
 }
-
