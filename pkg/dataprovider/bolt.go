@@ -104,6 +104,42 @@ func (p *BoltProvider) GetACL(ip string) (acl *ACL, err error) {
 	return
 }
 
+func (p *BoltProvider) GetAllACLs() (map[string]*ACL, error) {
+	result := make(map[string]*ACL)
+	expiredIPs := []string{}
+	
+	err := p.dbHandle.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket(aclBucket)
+		c := b.Cursor()
+		
+		for k, v := c.First(); k != nil; k, v = c.Next() {
+			ip := string(k)
+			var acl ACL
+			if err := json.Unmarshal(v, &acl); err != nil {
+				log.Errorw("failed to unmarshal ACL", "ip", ip, "error", err)
+				continue
+			}
+			
+			// Check if expired
+			if acl.IsExpired() {
+				expiredIPs = append(expiredIPs, ip)
+				continue
+			}
+			
+			result[ip] = &acl
+		}
+		return nil
+	})
+	
+	// Clean up expired ACLs
+	for _, ip := range expiredIPs {
+		log.Infof("user IP (%s) TTL has expired. Removing from database", ip)
+		p.RemoveIp(ip)
+	}
+	
+	return result, err
+}
+
 func (p *BoltProvider) UpdateACL(ip string, acl *ACL) error {
 	if !validate.IsIP(ip) {
 		return fmt.Errorf("validation error for IP: %s", ip)

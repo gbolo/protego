@@ -49,6 +49,23 @@ type getUser struct {
 	DNSNames []string `json:"dns_names,omitempty" example:"myhome.no-ip.info"`
 	// Represents the number of minutes this User's IP is whitelisted for after a successful challenge
 	TTLMinutes int `json:"ttl_minutes,omitempty" example:"60"`
+	// A list of IP addresses currently authorized for this user
+	IPs []string `json:"ips,omitempty" example:"192.168.1.100,10.0.0.50"`
+}
+
+type ipRequest struct {
+	// IP address to add or remove
+	IP string `json:"ip" example:"192.168.1.100"`
+}
+
+type configResponse struct {
+	LogLevel          string `json:"log_level" example:"debug"`
+	LogEncoding       string `json:"log_encoding" example:"console"`
+	ServerBindAddress string `json:"server_bind_address" example:"0.0.0.0"`
+	ServerBindPort    string `json:"server_bind_port" example:"8080"`
+	ServerTLSEnabled  bool   `json:"server_tls_enabled" example:"false"`
+	DBProvider        string `json:"db_provider" example:"bolt"`
+	DBBoltFile        string `json:"db_bolt_file" example:"./data/protego.db"`
 }
 
 type version struct {
@@ -76,6 +93,7 @@ func getUserConvert(user *dataprovider.User) getUser {
 		ACLAllowedHosts: user.ACLAllowedHosts,
 		DNSNames:        user.DNSNames,
 		TTLMinutes:      user.TTLMinutes,
+		IPs:             user.IPs,
 	}
 }
 
@@ -89,6 +107,7 @@ func getAllUsersConvert(users []dataprovider.User) (getUsers []getUser) {
 			ACLAllowedHosts: user.ACLAllowedHosts,
 			DNSNames:        user.DNSNames,
 			TTLMinutes:      user.TTLMinutes,
+			IPs:             user.IPs,
 		})
 	}
 	return

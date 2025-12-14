@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	validate "github.com/asaskevich/govalidator"
@@ -9,6 +10,18 @@ import (
 	"github.com/gbolo/protego/pkg/log"
 	"github.com/gofiber/fiber/v2"
 	"github.com/spf13/viper"
+)
+
+// AuthMetrics tracks authorization metrics per IP
+type AuthMetrics struct {
+	TotalRequests int            `json:"total_requests"`
+	FQDNAccess    map[string]int `json:"fqdn_access"`
+	LastSeen      time.Time      `json:"last_seen"`
+}
+
+var (
+	authMetrics     = make(map[string]*AuthMetrics)
+	authMetricsLock sync.RWMutex
 )
 
 // @title Protego - REST API
@@ -76,13 +89,22 @@ func handlerAuthorize(c *fiber.Ctx) error {
 		return c.SendStatus(fiber.StatusOK)
 	}
 	log.Debugf("client host acl: %v", acl.AllowedHosts)
-	if acl.CheckHost(c.Hostname()) {
-		log.Debugf("client (%s) ALLOWED access to host %s", clientIP, c.Hostname())
+	hostname := c.Hostname()
+	if acl.CheckHost(hostname) {
+		log.Debugf("client (%s) ALLOWED access to host %s", clientIP, hostname)
+
+		// Track metrics
+		trackAuthMetrics(clientIP, hostname, true)
+
 		return c.SendStatus(fiber.StatusOK)
 	}
 
 	// by default we deny everything
-	log.Debugf("client (%s) DENIED access to host %s", clientIP, c.Hostname())
+	log.Debugf("client (%s) DENIED access to host %s", clientIP, hostname)
+
+	// Track denied attempts too
+	trackAuthMetrics(clientIP, hostname, false)
+
 	return c.SendStatus(fiber.StatusUnauthorized)
 }
 
@@ -170,11 +192,12 @@ func handlerChallenge(c *fiber.Ctx) error {
 // @Success 200 {object} server.getUser
 // @Router /user [post]
 func handlerUserAdd(c *fiber.Ctx) error {
+	// TODO: re-enable authentication when webui supports it
 	// validate authorization header if enabled
-	if viper.GetString("admin.secret") != "" && c.Get("Admin-Secret") != viper.GetString("admin.secret") {
-		log.Warnf("admin credentials rejected")
-		return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"admin credentials rejected"})
-	}
+	//if viper.GetString("admin.secret") != "" && c.Get("Admin-Secret") != viper.GetString("admin.secret") {
+	//	log.Warnf("admin credentials rejected")
+	//	return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"admin credentials rejected"})
+	//}
 
 	// try to read the body
 	body := c.Body()
@@ -218,15 +241,16 @@ func handlerUserAdd(c *fiber.Ctx) error {
 // @Success 200 {object} server.getUser
 // @Router /user/{id} [put]
 func handlerUserUpdate(c *fiber.Ctx) error {
+	// TODO: re-enable authentication when webui supports it
 	// validate authorization header if enabled
 	// TODO: the user should also be able to modify itself
-	if viper.GetString("admin.secret") != "" && c.Get("Admin-Secret") != viper.GetString("admin.secret") {
-		log.Warnf("admin credentials rejected")
-		return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"admin credentials rejected"})
-	}
+	//if viper.GetString("admin.secret") != "" && c.Get("Admin-Secret") != viper.GetString("admin.secret") {
+	//	log.Warnf("admin credentials rejected")
+	//	return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"admin credentials rejected"})
+	//}
 
 	// get vars from request to determine if user id was specified
-	userId := c.Params("user-id")
+	userId := c.Params("userId")
 	user, err := dataProvider.GetUser(userId)
 	if user == nil || err != nil {
 		log.Warnf("user was not found: %s", userId)
@@ -269,15 +293,16 @@ func handlerUserUpdate(c *fiber.Ctx) error {
 // @Success 200 {object} server.getUser
 // @Router /user/{id} [get]
 func handlerUserGet(c *fiber.Ctx) error {
+	// TODO: re-enable authentication when webui supports it
 	// validate authorization header if enabled
 	// TODO: the user should also be able to modify itself
-	if viper.GetString("admin.secret") != "" && c.Get("Admin-Secret") != viper.GetString("admin.secret") {
-		log.Warnf("admin credentials rejected")
-		return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"admin credentials rejected"})
-	}
+	//if viper.GetString("admin.secret") != "" && c.Get("Admin-Secret") != viper.GetString("admin.secret") {
+	//	log.Warnf("admin credentials rejected")
+	//	return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"admin credentials rejected"})
+	//}
 
 	// get vars from request to determine if user id was specified
-	userId := c.Params("user-id")
+	userId := c.Params("userId")
 	user, err := dataProvider.GetUser(userId)
 	if user == nil || err != nil {
 		log.Warnf("user was not found: %s", userId)
@@ -295,12 +320,13 @@ func handlerUserGet(c *fiber.Ctx) error {
 // @Success 200 {array} server.getUser
 // @Router /user [get]
 func handlerUserGetAll(c *fiber.Ctx) error {
+	// TODO: re-enable authentication when webui supports it
 	// validate authorization header if enabled
 	// TODO: the user should also be able to modify itself
-	if viper.GetString("admin.secret") != "" && c.Get("Admin-Secret") != viper.GetString("admin.secret") {
-		log.Warnf("admin credentials rejected")
-		return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"admin credentials rejected"})
-	}
+	//if viper.GetString("admin.secret") != "" && c.Get("Admin-Secret") != viper.GetString("admin.secret") {
+	//	log.Warnf("admin credentials rejected")
+	//	return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"admin credentials rejected"})
+	//}
 
 	users, err := dataProvider.GetAllUsers()
 	if err != nil {
@@ -324,14 +350,15 @@ func handlerUserGetAll(c *fiber.Ctx) error {
 // @Success 200 {object} server.getUser
 // @Router /user/{id} [delete]
 func handlerUserDelete(c *fiber.Ctx) error {
+	// TODO: re-enable authentication when webui supports it
 	// validate authorization header if enabled
-	if viper.GetString("admin.secret") != "" && c.Get("Admin-Secret") != viper.GetString("admin.secret") {
-		log.Warnf("admin credentials rejected")
-		return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"admin credentials rejected"})
-	}
+	//if viper.GetString("admin.secret") != "" && c.Get("Admin-Secret") != viper.GetString("admin.secret") {
+	//	log.Warnf("admin credentials rejected")
+	//	return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"admin credentials rejected"})
+	//}
 
 	// get vars from request to determine if environment id was specified
-	userId := c.Params("user-id")
+	userId := c.Params("userId")
 	user, err := dataProvider.GetUser(userId)
 	if user == nil || err != nil {
 		log.Warnf("user was not found: %s", userId)
@@ -346,4 +373,216 @@ func handlerUserDelete(c *fiber.Ctx) error {
 	// user has been removed
 	log.Infof("user has been removed: %s", userId)
 	return c.Status(fiber.StatusOK).JSON(getUserConvert(user))
+}
+
+// handlerUserIPAdd godoc
+// @Summary Add IP to user
+// @Description Add an IP address to a user's ACL
+// @Tags User
+// @Accept json
+// @Produce json
+// @Param Admin-Secret header string false "Admin Secret"
+// @Param id path string true "User ID"
+// @Param ip body server.ipRequest true "IP address to add"
+// @Success 200 {object} server.getUser
+// @Router /user/{id}/ip [post]
+func handlerUserIPAdd(c *fiber.Ctx) error {
+	userId := c.Params("userId")
+	user, err := dataProvider.GetUser(userId)
+	if user == nil || err != nil {
+		log.Warnf("user was not found: %s", userId)
+		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"user was not found"})
+	}
+
+	var req ipRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"invalid request body"})
+	}
+
+	if req.IP == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"ip is required"})
+	}
+
+	// Validate IP format
+	if !validate.IsIPv4(req.IP) && !validate.IsIPv6(req.IP) {
+		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"invalid IP address format"})
+	}
+
+	// Add IP
+	user.AddIp(req.IP)
+
+	// Update user
+	err = dataProvider.UpdateUser(user)
+	if err != nil {
+		log.Warnf("unable to update user %s: %v", userId, err)
+		return c.Status(fiber.StatusInternalServerError).JSON(errorResponse{"unable to update user"})
+	}
+
+	// Fetch the updated user to ensure we have the latest state
+	user, err = dataProvider.GetUser(userId)
+	if err != nil || user == nil {
+		log.Warnf("unable to fetch updated user %s: %v", userId, err)
+		return c.Status(fiber.StatusInternalServerError).JSON(errorResponse{"unable to fetch updated user"})
+	}
+
+	log.Infof("IP added to user %s: %s", userId, req.IP)
+	return c.Status(fiber.StatusOK).JSON(getUserConvert(user))
+}
+
+// handlerUserIPRemove godoc
+// @Summary Remove IP from user
+// @Description Remove an IP address from a user's ACL
+// @Tags User
+// @Accept json
+// @Produce json
+// @Param Admin-Secret header string false "Admin Secret"
+// @Param id path string true "User ID"
+// @Param ip body server.ipRequest true "IP address to remove"
+// @Success 200 {object} server.getUser
+// @Router /user/{id}/ip [delete]
+func handlerUserIPRemove(c *fiber.Ctx) error {
+	userId := c.Params("userId")
+	user, err := dataProvider.GetUser(userId)
+	if user == nil || err != nil {
+		log.Warnf("user was not found: %s", userId)
+		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"user was not found"})
+	}
+
+	var req ipRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"invalid request body"})
+	}
+
+	if req.IP == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"ip is required"})
+	}
+
+	// Remove IP
+	user.RemoveIp(req.IP)
+
+	// Update user
+	err = dataProvider.UpdateUser(user)
+	if err != nil {
+		log.Warnf("unable to update user %s: %v", userId, err)
+		return c.Status(fiber.StatusInternalServerError).JSON(errorResponse{"unable to update user"})
+	}
+
+	// Fetch the updated user to ensure we have the latest state
+	user, err = dataProvider.GetUser(userId)
+	if err != nil || user == nil {
+		log.Warnf("unable to fetch updated user %s: %v", userId, err)
+		return c.Status(fiber.StatusInternalServerError).JSON(errorResponse{"unable to fetch updated user"})
+	}
+
+	log.Infof("IP removed from user %s: %s", userId, req.IP)
+	return c.Status(fiber.StatusOK).JSON(getUserConvert(user))
+}
+
+// handlerConfig godoc
+// @Summary Get configuration
+// @Description Get current server configuration (non-sensitive values)
+// @Tags Config
+// @Produce json
+// @Success 200 {object} server.configResponse
+// @Router /config [get]
+func handlerConfig(c *fiber.Ctx) error {
+	config := configResponse{
+		LogLevel:          viper.GetString("log.level"),
+		LogEncoding:       viper.GetString("log.encoding"),
+		ServerBindAddress: viper.GetString("server.bind_address"),
+		ServerBindPort:    viper.GetString("server.bind_port"),
+		ServerTLSEnabled:  viper.GetBool("server.tls.enabled"),
+		DBProvider:        viper.GetString("db.provider"),
+		DBBoltFile:        viper.GetString("db.bolt.file"),
+	}
+	return c.Status(fiber.StatusOK).JSON(config)
+}
+
+// handlerACLs godoc
+// @Summary Get all ACLs
+// @Description Get all authorized IP addresses with their ACLs
+// @Tags ACL
+// @Produce json
+// @Success 200 {object} map[string]dataprovider.ACL
+// @Router /acl [get]
+func handlerACLs(c *fiber.Ctx) error {
+	acls, err := dataProvider.GetAllACLs()
+	if err != nil {
+		log.Errorw("failed to get all ACLs", "error", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(errorResponse{"failed to retrieve ACLs"})
+	}
+	return c.Status(fiber.StatusOK).JSON(acls)
+}
+
+// handlerACLDelete godoc
+// @Summary Delete an ACL
+// @Description Remove an IP address from the ACL system
+// @Tags ACL
+// @Param ip path string true "IP Address"
+// @Success 200 {object} map[string]string
+// @Router /acl/{ip} [delete]
+func handlerACLDelete(c *fiber.Ctx) error {
+	ip := c.Params("ip")
+
+	if ip == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"ip is required"})
+	}
+
+	err := dataProvider.RemoveIp(ip)
+	if err != nil {
+		log.Warnw("failed to remove IP from ACL", "ip", ip, "error", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(errorResponse{"failed to remove IP from ACL"})
+	}
+
+	log.Infof("IP removed from ACL: %s", ip)
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{"message": "IP removed from ACL", "ip": ip})
+}
+
+// trackAuthMetrics tracks authorization metrics per IP and FQDN
+func trackAuthMetrics(ip, fqdn string, allowed bool) {
+	authMetricsLock.Lock()
+	defer authMetricsLock.Unlock()
+
+	metrics, exists := authMetrics[ip]
+	if !exists {
+		metrics = &AuthMetrics{
+			FQDNAccess: make(map[string]int),
+		}
+		authMetrics[ip] = metrics
+	}
+
+	metrics.TotalRequests++
+	metrics.LastSeen = time.Now()
+
+	if allowed {
+		metrics.FQDNAccess[fqdn]++
+	}
+}
+
+// handlerMetrics godoc
+// @Summary Get authorization metrics
+// @Description Get authorization request metrics per IP and FQDN
+// @Tags Metrics
+// @Produce json
+// @Success 200 {object} map[string]AuthMetrics
+// @Router /metrics [get]
+func handlerMetrics(c *fiber.Ctx) error {
+	authMetricsLock.RLock()
+	defer authMetricsLock.RUnlock()
+
+	// Create a copy to avoid holding the lock during JSON marshaling
+	metricsCopy := make(map[string]*AuthMetrics)
+	for ip, metrics := range authMetrics {
+		fqdnCopy := make(map[string]int)
+		for fqdn, count := range metrics.FQDNAccess {
+			fqdnCopy[fqdn] = count
+		}
+		metricsCopy[ip] = &AuthMetrics{
+			TotalRequests: metrics.TotalRequests,
+			FQDNAccess:    fqdnCopy,
+			LastSeen:      metrics.LastSeen,
+		}
+	}
+
+	return c.Status(fiber.StatusOK).JSON(metricsCopy)
 }

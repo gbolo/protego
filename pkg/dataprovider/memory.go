@@ -75,6 +75,33 @@ func (p *MemoryProvider) GetACL(ip string) (acl *ACL, err error) {
 	return
 }
 
+func (p *MemoryProvider) GetAllACLs() (map[string]*ACL, error) {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+	
+	result := make(map[string]*ACL)
+	expiredIPs := []string{}
+	
+	for ip, acl := range p.acls {
+		// Check if ACL is expired
+		if acl.IsExpired() {
+			expiredIPs = append(expiredIPs, ip)
+			continue
+		}
+		// Make a copy of the ACL
+		aclCopy := acl
+		result[ip] = &aclCopy
+	}
+	
+	// Clean up expired ACLs
+	for _, ip := range expiredIPs {
+		log.Infof("user IP (%s) TTL has expired. Removing from database", ip)
+		delete(p.acls, ip)
+	}
+	
+	return result, nil
+}
+
 func (p *MemoryProvider) UpdateACL(ip string, acl *ACL) error {
 	if !validate.IsIP(ip) {
 		return fmt.Errorf("validation error for IP: %s", ip)
@@ -152,8 +179,7 @@ func (p *MemoryProvider) UpdateUser(u *User) error {
 	if eu == nil {
 		return ErrUserNotFound
 	}
-	// overwrite the existing user, but keep associated IPs
-	u.IPs = eu.IPs
+	// overwrite the existing user
 	p.lock.Lock()
 	defer p.lock.Unlock()
 	p.users[u.ID] = *u

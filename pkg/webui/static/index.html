@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Protego Admin</title>
+    <link rel="stylesheet" href="/admin/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🛡️ Protego Admin</h1>
+            <p class="subtitle">IP-based Access Control Management</p>
+        </header>
+
+        <nav class="tabs">
+            <button class="tab-button active" data-tab="dashboard">Dashboard</button>
+            <button class="tab-button" data-tab="users">Users</button>
+            <button class="tab-button" data-tab="metrics">Metrics</button>
+            <button class="tab-button" data-tab="config">Configuration</button>
+        </nav>
+
+        <!-- Dashboard Tab -->
+        <div id="dashboard-tab" class="tab-content active">
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-total-users">0</div>
+                    <div class="stat-label">Total Users</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-enabled-users">0</div>
+                    <div class="stat-label">Enabled Users</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-total-ips">0</div>
+                    <div class="stat-label">Authorized IPs</div>
+                </div>
+            </div>
+
+            <h2 style="margin-bottom: 20px; color: var(--text-color);">Authorized IP Addresses</h2>
+            <div class="table-container">
+                <table id="ip-table">
+                    <thead>
+                        <tr>
+                            <th>IP Address</th>
+                            <th>User ID</th>
+                            <th>Description</th>
+                            <th>Status</th>
+                            <th>ACL Type</th>
+                            <th>Allowed Hosts</th>
+                            <th>Total Hits</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ip-tbody">
+                        <!-- Populated by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Users Tab -->
+        <div id="users-tab" class="tab-content">
+            <div class="actions">
+                <button class="btn btn-primary" onclick="showAddUserModal()">Add User</button>
+            </div>
+
+            <div class="table-container">
+                <table id="users-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Description</th>
+                            <th>Status</th>
+                            <th>ACL Type</th>
+                            <th>Allowed Hosts</th>
+                            <th>IPs</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="users-tbody">
+                        <!-- Populated by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Metrics Tab -->
+        <div id="metrics-tab" class="tab-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2 style="margin: 0; color: var(--text-color);">Authorization Metrics</h2>
+                <button class="btn btn-sm btn-primary" onclick="loadMetrics()">🔄 Refresh</button>
+            </div>
+            <div class="table-container">
+                <table id="metrics-table">
+                    <thead>
+                        <tr>
+                            <th>IP Address</th>
+                            <th>Total Requests</th>
+                            <th>FQDN Access</th>
+                            <th>Last Seen</th>
+                        </tr>
+                    </thead>
+                    <tbody id="metrics-tbody">
+                        <!-- Populated by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Config Tab -->
+        <div id="config-tab" class="tab-content">
+            <h2>Server Configuration</h2>
+            <div class="config-section" id="config-display">
+                <!-- Populated by JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit User Modal -->
+    <div id="user-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-title">Add User</h2>
+                <span class="close" onclick="closeUserModal()">&times;</span>
+            </div>
+            <form id="user-form" onsubmit="saveUser(event)">
+                <input type="hidden" id="user-id" name="id">
+                
+                <div class="form-group">
+                    <label for="description">Description</label>
+                    <input type="text" id="description" name="description" placeholder="User description">
+                </div>
+
+                <div class="form-group">
+                    <label for="secret">Secret (leave empty to keep existing)</label>
+                    <input type="password" id="secret" name="secret" placeholder="User secret">
+                </div>
+
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="enabled" name="enabled" checked>
+                        Enabled
+                    </label>
+                </div>
+
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="acl_allow_all" name="acl_allow_all">
+                        Allow All Hosts
+                    </label>
+                </div>
+
+                <div class="form-group" id="allowed-hosts-group">
+                    <label for="acl_allowed_hosts">Allowed Hosts (comma-separated)</label>
+                    <input type="text" id="acl_allowed_hosts" name="acl_allowed_hosts" placeholder="example.com, api.example.com">
+                    <small>FQDNs that this user can access</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="dns_names">DNS Names (comma-separated)</label>
+                    <input type="text" id="dns_names" name="dns_names" placeholder="myhome.no-ip.info">
+                    <small>DNS names that resolve to IPs which get whitelisted automatically</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="ttl_minutes">TTL Minutes</label>
+                    <input type="number" id="ttl_minutes" name="ttl_minutes" placeholder="60" min="0">
+                    <small>Number of minutes IP is whitelisted after successful challenge</small>
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeUserModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- IP Management Modal -->
+    <div id="ip-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Manage IPs for <span id="ip-modal-user-id"></span></h2>
+                <span class="close" onclick="closeIPModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="new-ip">Add New IP</label>
+                    <div class="input-with-button">
+                        <input type="text" id="new-ip" placeholder="192.168.1.100">
+                        <button class="btn btn-primary" onclick="addIP()">Add</button>
+                    </div>
+                </div>
+                <h3>Current IPs</h3>
+                <ul id="ip-list" class="ip-list">
+                    <!-- Populated by JavaScript -->
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- IP Metrics Detail Modal -->
+    <div id="ip-metrics-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Metrics for <code id="metrics-modal-ip"></code></h2>
+                <span class="close" onclick="closeIPMetricsModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom: 20px;">
+                    <div class="stat-card" style="display: inline-block; margin-right: 15px;">
+                        <div class="stat-value" id="metrics-total" style="font-size: 2em;">0</div>
+                        <div class="stat-label">Total Requests</div>
+                    </div>
+                    <div class="stat-card" style="display: inline-block;">
+                        <div class="stat-value" id="metrics-last-seen" style="font-size: 1em; color: var(--text-secondary);">-</div>
+                        <div class="stat-label">Last Seen</div>
+                    </div>
+                </div>
+                <h3 style="margin-bottom: 15px; color: var(--text-color);">FQDN Access Breakdown</h3>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>FQDN</th>
+                                <th>Request Count</th>
+                            </tr>
+                        </thead>
+                        <tbody id="fqdn-metrics-tbody">
+                            <!-- Populated by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/admin/static/app.js"></script>
+</body>
+</html>
+

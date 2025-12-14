@@ -9,6 +9,7 @@ type Provider interface {
 	AddIp(ip string, acl *ACL) error
 	RemoveIp(ip string) error
 	GetACL(ip string) (*ACL, error)
+	GetAllACLs() (map[string]*ACL, error)
 	UpdateACL(ip string, acl *ACL) error
 
 	// user management

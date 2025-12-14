@@ -8,6 +8,7 @@ package server
 import (
 	"crypto/tls"
 	"fmt"
+	"io/fs"
 	"net/http"
 
 	"github.com/gbolo/protego/pkg/asset"
@@ -15,8 +16,10 @@ import (
 	"github.com/gbolo/protego/pkg/dataprovider"
 	"github.com/gbolo/protego/pkg/httpserver"
 	"github.com/gbolo/protego/pkg/log"
+	"github.com/gbolo/protego/pkg/webui"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/adaptor"
+	"github.com/gofiber/fiber/v2/middleware/filesystem"
 	httpSwagger "github.com/gofiber/swagger"
 	"github.com/spf13/viper"
 )
@@ -88,10 +91,23 @@ func setupRoutes(app *fiber.App) {
 
 	// User management endpoints
 	api.Post("/user", handlerUserAdd)
-	api.Put("/user/:user-id", handlerUserUpdate)
-	api.Get("/user/:user-id", handlerUserGet)
+	// More specific routes first to avoid conflicts
+	api.Post("/user/:userId/ip", handlerUserIPAdd)
+	api.Delete("/user/:userId/ip", handlerUserIPRemove)
+	api.Put("/user/:userId", handlerUserUpdate)
+	api.Get("/user/:userId", handlerUserGet)
+	api.Delete("/user/:userId", handlerUserDelete)
 	api.Get("/user", handlerUserGetAll)
-	api.Delete("/user/:user-id", handlerUserDelete)
+
+	// Config endpoint
+	api.Get("/config", handlerConfig)
+
+	// ACL endpoints
+	api.Get("/acl", handlerACLs)
+	api.Delete("/acl/:ip", handlerACLDelete)
+
+	// Metrics endpoint
+	api.Get("/metrics", handlerMetrics)
 
 	// Swagger UI
 	app.Get("/swagger", func(c *fiber.Ctx) error {
@@ -99,10 +115,28 @@ func setupRoutes(app *fiber.App) {
 	})
 	app.Get("/swagger/*", httpSwagger.HandlerDefault)
 
-	// Serve embedded static assets (web UI)
+	// Serve old embedded static assets (legacy web UI for other routes)
 	// Use adaptor to convert http.FileServer to Fiber handler
 	fileServer := http.FileServer(asset.Assets)
-	app.Get("/*", adaptor.HTTPHandler(fileServer))
+	app.Get("/static/*", adaptor.HTTPHandler(fileServer))
+
+	// Admin Web UI - Serve static files from embedded FS
+	staticFS, _ := fs.Sub(webui.StaticFiles, "static")
+	app.Use("/admin/static", filesystem.New(filesystem.Config{
+		Root:       http.FS(staticFS),
+		PathPrefix: "",
+		Browse:     false,
+	}))
+
+	// Admin Web UI - Serve index.html for all /admin paths (SPA routing)
+	app.Get("/admin*", func(c *fiber.Ctx) error {
+		indexHTML, err := webui.StaticFiles.ReadFile("static/index.html")
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).SendString("Failed to load admin UI")
+		}
+		c.Set("Content-Type", "text/html")
+		return c.Send(indexHTML)
+	})
 }
 
 func startHTTPServer() (err error) {
