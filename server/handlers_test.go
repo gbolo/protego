@@ -351,6 +351,177 @@ func TestHandlerChallengeAndAuthorize(t *testing.T) {
 	}
 }
 
+func TestHandlerChallenge_MergeACLsForSameIP(t *testing.T) {
+	setupTestAPI(t)
+
+	const (
+		userSecret1 = "secret-user-1"
+		userSecret2 = "secret-user-2"
+		clientIP    = "203.0.113.20"
+		host1       = "git.example.com"
+		host2       = "wiki.example.com"
+	)
+
+	// --- create first user via POST /user ---
+	reqBody1 := addUser{
+		Enabled:         true,
+		Description:     "First User",
+		Secret:          userSecret1,
+		ACLAllowAll:     false,
+		ACLAllowedHosts: []string{host1},
+		TTLMinutes:      60, // shorter TTL
+	}
+	b1, err := json.Marshal(reqBody1)
+	if err != nil {
+		t.Fatalf("json.Marshal addUser1: %v", err)
+	}
+
+	addReq1 := httptest.NewRequest(http.MethodPost, "/user", bytes.NewReader(b1))
+	addReq1.Header.Set("Content-Type", "application/json")
+	addReq1.Header.Set("Admin-Secret", "test-admin-secret")
+
+	addRR1 := httptest.NewRecorder()
+	handlerUserAdd(addRR1, addReq1)
+
+	if addRR1.Code != http.StatusOK {
+		t.Fatalf("handlerUserAdd (user1) status = %d, want %d; body=%q",
+			addRR1.Code, http.StatusOK, addRR1.Body.String())
+	}
+
+	var created1 getUser
+	decodeJSON(t, addRR1.Body, &created1)
+
+	// --- first POST /challenge with user1 ---
+	chReq1 := httptest.NewRequest(http.MethodPost, "/challenge", nil)
+	chReq1.Header.Set("X-Real-IP", clientIP)
+	chReq1.Header.Set("User-Secret", userSecret1)
+
+	chRR1 := httptest.NewRecorder()
+	handlerChallenge(chRR1, chReq1)
+
+	if chRR1.Code != http.StatusAccepted {
+		t.Fatalf("handlerChallenge (user1) status = %d, want %d; body=%q",
+			chRR1.Code, http.StatusAccepted, chRR1.Body.String())
+	}
+
+	var chResp1 challengeResponse
+	decodeJSON(t, chRR1.Body, &chResp1)
+
+	if chResp1.IpAddress != clientIP {
+		t.Fatalf("challengeResponse1 IpAddress mismatch: got %q want %q",
+			chResp1.IpAddress, clientIP)
+	}
+	if len(chResp1.ACL.AllowedHosts) != 1 || chResp1.ACL.AllowedHosts[0] != host1 {
+		t.Fatalf("challengeResponse1 ACL.AllowedHosts mismatch: got %v want [%q]",
+			chResp1.ACL.AllowedHosts, host1)
+	}
+	if chResp1.ACL.TTL == nil {
+		t.Fatalf("challengeResponse1 TTL should not be nil")
+	}
+	firstTTL := *chResp1.ACL.TTL
+
+	// --- create second user with different ACL + longer TTL + AllowAll=true ---
+	reqBody2 := addUser{
+		Enabled:         true,
+		Description:     "Second User",
+		Secret:          userSecret2,
+		ACLAllowAll:     true, // this should win
+		ACLAllowedHosts: []string{host2},
+		TTLMinutes:      120, // longer TTL
+	}
+	b2, err := json.Marshal(reqBody2)
+	if err != nil {
+		t.Fatalf("json.Marshal addUser2: %v", err)
+	}
+
+	addReq2 := httptest.NewRequest(http.MethodPost, "/user", bytes.NewReader(b2))
+	addReq2.Header.Set("Content-Type", "application/json")
+	addReq2.Header.Set("Admin-Secret", "test-admin-secret")
+
+	addRR2 := httptest.NewRecorder()
+	handlerUserAdd(addRR2, addReq2)
+
+	if addRR2.Code != http.StatusOK {
+		t.Fatalf("handlerUserAdd (user2) status = %d, want %d; body=%q",
+			addRR2.Code, http.StatusOK, addRR2.Body.String())
+	}
+
+	var created2 getUser
+	decodeJSON(t, addRR2.Body, &created2)
+
+	// --- second POST /challenge with SAME IP but user2's secret ---
+	chReq2 := httptest.NewRequest(http.MethodPost, "/challenge", nil)
+	chReq2.Header.Set("X-Real-IP", clientIP)
+	chReq2.Header.Set("User-Secret", userSecret2)
+
+	chRR2 := httptest.NewRecorder()
+	handlerChallenge(chRR2, chReq2)
+
+	if chRR2.Code != http.StatusAccepted {
+		t.Fatalf("handlerChallenge (user2) status = %d, want %d; body=%q",
+			chRR2.Code, http.StatusAccepted, chRR2.Body.String())
+	}
+
+	var chResp2 challengeResponse
+	decodeJSON(t, chRR2.Body, &chResp2)
+
+	// --- Assert merged ACL properties ---
+
+	// AllowAll: true should win
+	if !chResp2.ACL.AllowAll {
+		t.Fatalf("merged ACL AllowAll = false, want true")
+	}
+
+	// AllowedHosts: union of host1 and host2
+	hostSet := make(map[string]struct{})
+	for _, h := range chResp2.ACL.AllowedHosts {
+		hostSet[h] = struct{}{}
+	}
+	if _, ok := hostSet[host1]; !ok {
+		t.Fatalf("merged ACL.AllowedHosts missing %q: %v", host1, chResp2.ACL.AllowedHosts)
+	}
+	if _, ok := hostSet[host2]; !ok {
+		t.Fatalf("merged ACL.AllowedHosts missing %q: %v", host2, chResp2.ACL.AllowedHosts)
+	}
+
+	// TTL: greater of the two should win (so it must not be earlier than firstTTL)
+	if chResp2.ACL.TTL == nil {
+		t.Fatalf("merged ACL TTL should not be nil")
+	}
+	if chResp2.ACL.TTL.Before(firstTTL) {
+		t.Fatalf("merged ACL TTL %v is before first TTL %v (expected >=)",
+			chResp2.ACL.TTL, firstTTL)
+	}
+
+	// --- Authorization with merged ACL: both hosts should now be allowed ---
+
+	// host1
+	authReq1 := httptest.NewRequest(http.MethodGet, "/authorize", nil)
+	authReq1.Header.Set("X-Real-IP", clientIP)
+	authReq1.Host = host1
+
+	authRR1 := httptest.NewRecorder()
+	handlerAuthorize(authRR1, authReq1)
+
+	if authRR1.Code != http.StatusOK {
+		t.Fatalf("handlerAuthorize (host1) status = %d, want %d; body=%q",
+			authRR1.Code, http.StatusOK, authRR1.Body.String())
+	}
+
+	// host2
+	authReq2 := httptest.NewRequest(http.MethodGet, "/authorize", nil)
+	authReq2.Header.Set("X-Real-IP", clientIP)
+	authReq2.Host = host2
+
+	authRR2 := httptest.NewRecorder()
+	handlerAuthorize(authRR2, authReq2)
+
+	if authRR2.Code != http.StatusOK {
+		t.Fatalf("handlerAuthorize (host2) status = %d, want %d; body=%q",
+			authRR2.Code, http.StatusOK, authRR2.Body.String())
+	}
+}
+
 // -----------------------------------------------------------------------------
 // Negative test: missing Admin-Secret on /user
 // -----------------------------------------------------------------------------
