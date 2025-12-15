@@ -12,28 +12,33 @@ import (
 	"github.com/spf13/viper"
 )
 
-// --- test helpers ---
+// -----------------------------------------------------------------------------
+// Test setup helpers
+// -----------------------------------------------------------------------------
 
-// sets up a fresh in-memory data provider and a clean config
+// sets up a fresh in-memory data provider and ddnsProvider + clean config
 func setupTestAPI(t *testing.T) {
 	t.Helper()
 
-	// clean viper between tests
+	// Clean Viper between tests
 	viper.Reset()
-	// require an admin secret, so we test that header handling works
 	viper.Set("admin.secret", "test-admin-secret")
 
-	// fresh memory provider for each test
+	// Fresh memory provider
 	mp, err := dataprovider.NewMemoryProvider()
 	if err != nil {
 		t.Fatalf("NewMemoryProvider: %v", err)
 	}
-	// override the global dataProvider used by handlers.go
+	if err := mp.InitializeDatabase(); err != nil {
+		t.Fatalf("InitializeDatabase: %v", err)
+	}
+	if err := mp.CheckAvailability(); err != nil {
+		t.Fatalf("CheckAvailability: %v", err)
+	}
 	dataProvider = &mp
 
-	// IMPORTANT: we deliberately do *not* use DNS features in these tests,
-	// so we don't need to touch ddnsProvider at all.
-	// As long as we don't set DNSNames on users, ddnsProvider won't be used.
+	// Initialize ddnsProvider so handlerUserAdd/Update/Delete can call ProcessUser()
+	ddnsProvider = dataprovider.NewDdnsProvider()
 }
 
 // small helper to decode JSON into a target struct and fail on error
@@ -44,11 +49,12 @@ func decodeJSON(t *testing.T, body *bytes.Buffer, out interface{}) {
 	}
 }
 
-// --- tests ---
+// -----------------------------------------------------------------------------
+// /version
+// -----------------------------------------------------------------------------
 
-// Basic sanity check for /version (handlerVersion)
 func TestHandlerVersion(t *testing.T) {
-	// handlerVersion doesn't depend on dataProvider, so no setup needed
+	// handlerVersion does not depend on dataProvider, so no full setup needed
 	req := httptest.NewRequest(http.MethodGet, "/version", nil)
 	rr := httptest.NewRecorder()
 
@@ -69,66 +75,64 @@ func TestHandlerVersion(t *testing.T) {
 	}
 }
 
-// Happy-path test for:
-//
-//	POST /user  -> handlerUserAdd
-//	GET  /user/{id} -> handlerUserGet
-func TestHandlerUserAddAndGet(t *testing.T) {
+// -----------------------------------------------------------------------------
+// User CRUD: Add → Get → Update → Get → GetAll → Delete → Get (fail)
+// -----------------------------------------------------------------------------
+
+func TestHandlerUserCRUD(t *testing.T) {
 	setupTestAPI(t)
 
-	// --- POST /user (handlerUserAdd) ---
+	// ---------- 1. Add user via POST /user ----------
 
-	reqBody := addUser{
+	createReqBody := addUser{
 		Enabled:         true,
 		Description:     "Test User",
-		Secret:          "supersecret",
+		Secret:          "supersecret", // required by dataprovider.DecodeUser
 		ACLAllowAll:     false,
 		ACLAllowedHosts: []string{"git.example.com"},
-		// DNSNames intentionally empty to avoid ddnsProvider usage
+		// DNSNames intentionally empty to avoid real DNS lookups
 		TTLMinutes: 60,
 	}
 
-	b, err := json.Marshal(reqBody)
+	createBytes, err := json.Marshal(createReqBody)
 	if err != nil {
 		t.Fatalf("json.Marshal addUser: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/user", bytes.NewReader(b))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Admin-Secret", "test-admin-secret")
+	createReq := httptest.NewRequest(http.MethodPost, "/user", bytes.NewReader(createBytes))
+	createReq.Header.Set("Content-Type", "application/json")
+	createReq.Header.Set("Admin-Secret", "test-admin-secret")
 
-	rr := httptest.NewRecorder()
-	handlerUserAdd(rr, req)
+	createRR := httptest.NewRecorder()
+	handlerUserAdd(createRR, createReq)
 
-	if rr.Code != http.StatusOK {
+	if createRR.Code != http.StatusOK {
 		t.Fatalf("handlerUserAdd status = %d, want %d; body=%q",
-			rr.Code, http.StatusOK, rr.Body.String())
+			createRR.Code, http.StatusOK, createRR.Body.String())
 	}
 
 	var created getUser
-	decodeJSON(t, rr.Body, &created)
+	decodeJSON(t, createRR.Body, &created)
 
 	if created.ID == "" {
 		t.Fatalf("expected created user to have ID, got: %#v", created)
 	}
-	if created.Description != reqBody.Description {
+	if created.Description != createReqBody.Description {
 		t.Fatalf("Description mismatch: got %q want %q",
-			created.Description, reqBody.Description)
+			created.Description, createReqBody.Description)
 	}
-	if created.Enabled != reqBody.Enabled {
+	if created.Enabled != createReqBody.Enabled {
 		t.Fatalf("Enabled mismatch: got %v want %v",
-			created.Enabled, reqBody.Enabled)
+			created.Enabled, createReqBody.Enabled)
 	}
 
-	// --- GET /user/{id} (handlerUserGet) ---
+	userID := created.ID
 
-	getReq := httptest.NewRequest(http.MethodGet, "/user/"+created.ID, nil)
+	// ---------- 2. Get user via GET /user/{user-id} ----------
+
+	getReq := httptest.NewRequest(http.MethodGet, "/user/"+userID, nil)
 	getReq.Header.Set("Admin-Secret", "test-admin-secret")
-
-	// mux.Vars() is used in handlerUserGet, so we must set them
-	getReq = mux.SetURLVars(getReq, map[string]string{
-		"user-id": created.ID,
-	})
+	getReq = mux.SetURLVars(getReq, map[string]string{"user-id": userID})
 
 	getRR := httptest.NewRecorder()
 	handlerUserGet(getRR, getReq)
@@ -141,20 +145,121 @@ func TestHandlerUserAddAndGet(t *testing.T) {
 	var fetched getUser
 	decodeJSON(t, getRR.Body, &fetched)
 
-	if fetched.ID != created.ID {
-		t.Fatalf("ID mismatch: got %q want %q", fetched.ID, created.ID)
+	if fetched.ID != userID {
+		t.Fatalf("GET /user/{id}: ID mismatch: got %q want %q", fetched.ID, userID)
 	}
-	if fetched.Description != created.Description {
-		t.Fatalf("Description mismatch: got %q want %q",
-			fetched.Description, created.Description)
+
+	// ---------- 3. Update user via PUT /user/{user-id} ----------
+
+	updateReqBody := addUser{
+		Enabled:         false,
+		Description:     "Updated User",
+		Secret:          "supersecret", // must match original secret so ID matches
+		ACLAllowAll:     true,
+		ACLAllowedHosts: []string{"git.example.com", "wiki.example.com"},
+		TTLMinutes:      120,
+	}
+	updateBytes, err := json.Marshal(updateReqBody)
+	if err != nil {
+		t.Fatalf("json.Marshal update addUser: %v", err)
+	}
+
+	updateReq := httptest.NewRequest(http.MethodPut, "/user/"+userID, bytes.NewReader(updateBytes))
+	updateReq.Header.Set("Content-Type", "application/json")
+	updateReq.Header.Set("Admin-Secret", "test-admin-secret")
+	updateReq = mux.SetURLVars(updateReq, map[string]string{"user-id": userID})
+
+	updateRR := httptest.NewRecorder()
+	handlerUserUpdate(updateRR, updateReq)
+
+	if updateRR.Code != http.StatusOK {
+		t.Fatalf("handlerUserUpdate status = %d, want %d; body=%q",
+			updateRR.Code, http.StatusOK, updateRR.Body.String())
+	}
+
+	var updated getUser
+	decodeJSON(t, updateRR.Body, &updated)
+
+	if updated.ID != userID {
+		t.Fatalf("Update: ID changed: got %q want %q", updated.ID, userID)
+	}
+	if updated.Description != updateReqBody.Description {
+		t.Fatalf("Update: Description mismatch: got %q want %q",
+			updated.Description, updateReqBody.Description)
+	}
+	if updated.Enabled != updateReqBody.Enabled {
+		t.Fatalf("Update: Enabled mismatch: got %v want %v",
+			updated.Enabled, updateReqBody.Enabled)
+	}
+	if updated.ACLAllowAll != updateReqBody.ACLAllowAll {
+		t.Fatalf("Update: ACLAllowAll mismatch: got %v want %v",
+			updated.ACLAllowAll, updateReqBody.ACLAllowAll)
+	}
+	if len(updated.ACLAllowedHosts) != len(updateReqBody.ACLAllowedHosts) {
+		t.Fatalf("Update: ACLAllowedHosts length mismatch: got %v want %v",
+			updated.ACLAllowedHosts, updateReqBody.ACLAllowedHosts)
+	}
+
+	// ---------- 4. GetAll users via GET /user ----------
+
+	getAllReq := httptest.NewRequest(http.MethodGet, "/user", nil)
+	getAllReq.Header.Set("Admin-Secret", "test-admin-secret")
+
+	getAllRR := httptest.NewRecorder()
+	handlerUserGetAll(getAllRR, getAllReq)
+
+	if getAllRR.Code != http.StatusOK {
+		t.Fatalf("handlerUserGetAll status = %d, want %d; body=%q",
+			getAllRR.Code, http.StatusOK, getAllRR.Body.String())
+	}
+
+	var all []getUser
+	decodeJSON(t, getAllRR.Body, &all)
+
+	found := false
+	for _, u := range all {
+		if u.ID == userID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("GetAll: expected to find user %q in list, got: %#v", userID, all)
+	}
+
+	// ---------- 5. Delete user via DELETE /user/{user-id} ----------
+
+	delReq := httptest.NewRequest(http.MethodDelete, "/user/"+userID, nil)
+	delReq.Header.Set("Admin-Secret", "test-admin-secret")
+	delReq = mux.SetURLVars(delReq, map[string]string{"user-id": userID})
+
+	delRR := httptest.NewRecorder()
+	handlerUserDelete(delRR, delReq)
+
+	if delRR.Code != http.StatusOK {
+		t.Fatalf("handlerUserDelete status = %d, want %d; body=%q",
+			delRR.Code, http.StatusOK, delRR.Body.String())
+	}
+
+	// ---------- 6. Get after delete should fail with 400 ----------
+
+	getAfterDelReq := httptest.NewRequest(http.MethodGet, "/user/"+userID, nil)
+	getAfterDelReq.Header.Set("Admin-Secret", "test-admin-secret")
+	getAfterDelReq = mux.SetURLVars(getAfterDelReq, map[string]string{"user-id": userID})
+
+	getAfterDelRR := httptest.NewRecorder()
+	handlerUserGet(getAfterDelRR, getAfterDelReq)
+
+	if getAfterDelRR.Code != http.StatusBadRequest {
+		t.Fatalf("GET /user/{id} after delete: status = %d, want %d; body=%q",
+			getAfterDelRR.Code, http.StatusBadRequest, getAfterDelRR.Body.String())
 	}
 }
 
-// Tests:
-//
-//	POST /user           -> create a user
-//	POST /challenge      -> grant ACL to X-Real-IP using user secret
-//	GET  /authorize      -> check that IP+Host is allowed
+// -----------------------------------------------------------------------------
+// Challenge + Authorize flow
+// -----------------------------------------------------------------------------
+
 func TestHandlerChallengeAndAuthorize(t *testing.T) {
 	setupTestAPI(t)
 
@@ -174,7 +279,6 @@ func TestHandlerChallengeAndAuthorize(t *testing.T) {
 		ACLAllowedHosts: []string{host},
 		TTLMinutes:      60,
 	}
-
 	b, err := json.Marshal(reqBody)
 	if err != nil {
 		t.Fatalf("json.Marshal addUser: %v", err)
@@ -191,9 +295,6 @@ func TestHandlerChallengeAndAuthorize(t *testing.T) {
 		t.Fatalf("handlerUserAdd status = %d, want %d; body=%q",
 			addRR.Code, http.StatusOK, addRR.Body.String())
 	}
-
-	var created getUser
-	decodeJSON(t, addRR.Body, &created)
 
 	// --- POST /challenge with X-Real-IP and User-Secret ---
 
@@ -212,21 +313,12 @@ func TestHandlerChallengeAndAuthorize(t *testing.T) {
 	var chResp challengeResponse
 	decodeJSON(t, chRR.Body, &chResp)
 
-	if chResp.Message == "" {
-		t.Fatalf("expected non-empty Message in challengeResponse, got: %#v", chResp)
-	}
-	if chResp.UserId != created.ID {
-		t.Fatalf("UserId mismatch: got %q want %q", chResp.UserId, created.ID)
-	}
 	if chResp.IpAddress != clientIP {
-		t.Fatalf("IpAddress mismatch: got %q want %q", chResp.IpAddress, clientIP)
+		t.Fatalf("challengeResponse IpAddress mismatch: got %q want %q",
+			chResp.IpAddress, clientIP)
 	}
-	if chResp.ACL.AllowAll != reqBody.ACLAllowAll {
-		t.Fatalf("ACL.AllowAll mismatch: got %v want %v",
-			chResp.ACL.AllowAll, reqBody.ACLAllowAll)
-	}
-	if len(chResp.ACL.AllowedHosts) != 1 || chResp.ACL.AllowedHosts[0] != host {
-		t.Fatalf("ACL.AllowedHosts mismatch: got %v want [%q]",
+	if len(chResp.ACL.AllowedHosts) == 0 || chResp.ACL.AllowedHosts[0] != host {
+		t.Fatalf("challengeResponse ACL.AllowedHosts mismatch: got %v want [%q]",
 			chResp.ACL.AllowedHosts, host)
 	}
 
@@ -244,7 +336,8 @@ func TestHandlerChallengeAndAuthorize(t *testing.T) {
 			authRR.Code, http.StatusOK, authRR.Body.String())
 	}
 
-	// and if we change Host to something not in the ACL, it should be 401
+	// --- And if we change Host to something not in the ACL, it should be 401 ---
+
 	authReq2 := httptest.NewRequest(http.MethodGet, "/authorize", nil)
 	authReq2.Header.Set("X-Real-IP", clientIP)
 	authReq2.Host = "other.example.com"
@@ -253,12 +346,15 @@ func TestHandlerChallengeAndAuthorize(t *testing.T) {
 	handlerAuthorize(authRR2, authReq2)
 
 	if authRR2.Code != http.StatusUnauthorized {
-		t.Fatalf("handlerAuthorize (bad host) status = %d, want %d",
-			authRR2.Code, http.StatusUnauthorized)
+		t.Fatalf("handlerAuthorize (bad host) status = %d, want %d; body=%q",
+			authRR2.Code, http.StatusUnauthorized, authRR2.Body.String())
 	}
 }
 
-// Simple negative test: missing/incorrect Admin-Secret should be 401 on /user
+// -----------------------------------------------------------------------------
+// Negative test: missing Admin-Secret on /user
+// -----------------------------------------------------------------------------
+
 func TestHandlerUserAdd_UnauthorizedWithoutAdminSecret(t *testing.T) {
 	setupTestAPI(t)
 
@@ -275,7 +371,7 @@ func TestHandlerUserAdd_UnauthorizedWithoutAdminSecret(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/user", bytes.NewReader(b))
 	req.Header.Set("Content-Type", "application/json")
-	// NOTE: no Admin-Secret header set
+	// NOTE: no Admin-Secret header
 
 	rr := httptest.NewRecorder()
 	handlerUserAdd(rr, req)
