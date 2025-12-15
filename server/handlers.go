@@ -23,7 +23,6 @@ import (
 // @license.url https://github.com/gbolo/protego/blob/master/LICENSE
 // @BasePath /api/v1
 
-
 // handlerVersion godoc
 // @Summary Version information
 // @Description Retrieve the version information of this Protego server
@@ -144,16 +143,31 @@ func handlerChallenge(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// add this actualUser's IP to whitelist
-	acl := dataprovider.ACL{
+	newAcl := dataprovider.ACL{
 		AllowAll:     actualUser.ACLAllowAll,
 		AllowedHosts: actualUser.ACLAllowedHosts,
 	}
 	if actualUser.TTLMinutes > 0 {
 		ttl := time.Now().Add(time.Duration(actualUser.TTLMinutes) * time.Minute)
-		acl.TTL = &ttl
+		newAcl.TTL = &ttl
 		log.Infof("set user IP (%s) TTL to: %v", clientIP, ttl)
 	}
-	err = dataProvider.AddIp(clientIP, &acl)
+
+	// check if an acl already exists for this IP
+	existingAcl, err := dataProvider.GetACL(clientIP)
+	if err != nil {
+		log.Errorf("unable to get ACL from DB: %s", err)
+		writeJSONResponse(w, http.StatusInternalServerError, errorResponse{"there was an error handling this request"})
+		return
+	}
+
+	// log a warning if we will be merging a different user ACLs together
+	if existingAcl != nil && !existingAcl.CheckUserId(user.ID) {
+		log.Warningf("other user(s) [%v] already have an ACL for client IP: %s. Will need to merge ACls", existingAcl.UserIDs, clientIP)
+	}
+
+	acl := dataprovider.MergeACL(&newAcl, existingAcl)
+	err = dataProvider.AddIp(clientIP, acl)
 	if err != nil {
 		log.Errorf("unable to add ACL to DB: %s", err)
 		writeJSONResponse(w, http.StatusInternalServerError, errorResponse{"there was an error handling this request"})
@@ -167,10 +181,9 @@ func handlerChallenge(w http.ResponseWriter, req *http.Request) {
 		UserId:    actualUser.ID,
 		IpAddress: clientIP,
 	}
-	apiResponse.ACL = acl
+	apiResponse.ACL = *acl
 	writeJSONResponse(w, http.StatusAccepted, apiResponse)
 }
-
 
 // handlerUserAdd godoc
 // @Summary Add a new User
