@@ -152,6 +152,26 @@ func newRouter() *mux.Router {
 			Handler(handler)
 	}
 
+	// add admin UI
+	router.Methods("GET").Path("/admin").HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		// serve admin.html from embedded assets
+		file, err := asset.Assets.Open("/admin.html")
+		if err != nil {
+			http.Error(w, "Admin page not found", http.StatusNotFound)
+			return
+		}
+		defer file.Close()
+
+		stat, err := file.Stat()
+		if err != nil {
+			http.Error(w, "Error reading admin page", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		http.ServeContent(w, req, "admin.html", stat.ModTime(), file)
+	})
+
 	// add swagger UI
 	router.Methods("GET").Path("/swagger").HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		// redirect to /swagger/index.html which is provided by httpSwagger.WrapHandler
