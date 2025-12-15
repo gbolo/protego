@@ -1,5 +1,6 @@
 
-URL="http://127.0.0.1:8080/api/v1/user"
+BASE_URL="${OVERRIDE_URL:-http://127.0.0.1:8080}"
+URL="${BASE_URL}/api/v1/user"
 
 # using httpie
 # http --print=Hhb PUT ${URL} ADMIN-SECRET:supersecret <<< '{"Enabled":true,"Description":"this is a test","ID":"5e8848","secret":"password","ACL":{"allow_all":false,"allowed_hosts":["git.fqdn","emby.fqdn","tor.fqdn"]},"ValidDuration":60000000000}'

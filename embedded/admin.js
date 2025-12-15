@@ -2,6 +2,8 @@
 let adminSecret = '';
 let currentACLEdit = null;
 let currentUserEdit = null;
+let allACLs = [];
+let allUsers = [];
 
 // API Base URL
 const API_BASE = '/api/v1';
@@ -39,11 +41,8 @@ function authenticate() {
 
 function showAuthError(message) {
   const errorDiv = $('#auth-error');
-  errorDiv.find('button.delete').off('click').on('click', function() {
-    errorDiv.addClass('is-hidden');
-  });
   errorDiv.text(message);
-  errorDiv.removeClass('is-hidden');
+  errorDiv.show();
 }
 
 // ============================================================================
@@ -51,17 +50,32 @@ function showAuthError(message) {
 // ============================================================================
 
 function initTabs() {
-  $('.tabs li').on('click', function() {
+  $('.tab').on('click', function() {
     const tab = $(this).data('tab');
     
     // Update active tab
-    $('.tabs li').removeClass('is-active');
-    $(this).addClass('is-active');
+    $('.tab').removeClass('active');
+    $(this).addClass('active');
     
     // Show corresponding content
-    $('.content-section').removeClass('is-active');
-    $(`#${tab}-content`).addClass('is-active');
+    $('.content-section').removeClass('active');
+    $(`#${tab}-content`).addClass('active');
   });
+}
+
+// ============================================================================
+// Stats Update
+// ============================================================================
+
+function updateStats() {
+  $('#totalACLs').text(allACLs.length);
+  $('#totalUsers').text(allUsers.length);
+  
+  const enabledCount = allUsers.filter(u => u.enabled).length;
+  const disabledCount = allUsers.length - enabledCount;
+  
+  $('#enabledUsers').text(enabledCount);
+  $('#disabledUsers').text(disabledCount);
 }
 
 // ============================================================================
@@ -70,21 +84,15 @@ function initTabs() {
 
 function showNotification(message, type = 'success') {
   const notification = $('#global-notification');
-  notification.removeClass('is-success is-danger is-warning is-info');
-  notification.addClass(`is-${type}`);
-  $('#notification-message').text(message);
-  notification.removeClass('is-hidden');
+  notification.removeClass('message-success message-error message-info');
+  notification.addClass(`message-${type}`);
+  notification.text(message);
+  notification.show();
   
   // Auto-hide after 5 seconds
   setTimeout(() => {
-    notification.addClass('is-hidden');
+    notification.hide();
   }, 5000);
-}
-
-function initNotificationClose() {
-  $('#global-notification .delete').on('click', function() {
-    $('#global-notification').addClass('is-hidden');
-  });
 }
 
 // ============================================================================
@@ -92,76 +100,104 @@ function initNotificationClose() {
 // ============================================================================
 
 function loadACLs() {
+  $('#acl-loading').show();
+  $('#acls-container').empty();
+  
   $.ajax({
     type: 'GET',
     url: `${API_BASE}/acl`,
     headers: { 'Admin-Secret': adminSecret },
     success: function(data) {
-      renderACLs(data);
+      allACLs = data || [];
+      renderACLs(allACLs);
+      updateStats();
+      updateLastUpdated('acl-last-updated');
+      $('#acl-loading').hide();
     },
     error: function(xhr) {
-      $('#acls-table-body').html(`
-        <tr>
-          <td colspan="6" class="has-text-centered has-text-danger">
-            Failed to load ACLs: ${xhr.responseJSON?.error || 'Unknown error'}
-          </td>
-        </tr>
+      $('#acl-loading').hide();
+      $('#acls-container').html(`
+        <div class="message message-error">
+          Failed to load ACLs: ${xhr.responseJSON?.error || 'Unknown error'}
+        </div>
       `);
     }
   });
 }
 
 function renderACLs(acls) {
-  const tbody = $('#acls-table-body');
+  const container = $('#acls-container');
+  container.empty();
   
   if (!acls || acls.length === 0) {
-    tbody.html(`
-      <tr>
-        <td colspan="6" class="has-text-centered has-text-grey-light">
-          No ACLs found. Click "Add ACL" to create one.
-        </td>
-      </tr>
+    container.html(`
+      <div class="message message-info">
+        <i class="fi fi-rr-info"></i>
+        <span>No ACLs found. Click "Add ACL" to create one.</span>
+      </div>
     `);
     return;
   }
   
-  tbody.empty();
   acls.forEach(acl => {
-    const allowAllBadge = acl.allow_all 
-      ? '<span class="tag is-success">Yes</span>' 
-      : '<span class="tag">No</span>';
+    const allowAllTag = acl.allow_all 
+      ? '<span class="tag tag-success">Yes</span>' 
+      : '<span class="tag tag-secondary">No</span>';
     
-    const hosts = acl.allowed_hosts && acl.allowed_hosts.length > 0
-      ? `<div class="tag-list">${acl.allowed_hosts.map(h => `<span class="tag is-info">${h}</span>`).join('')}</div>`
-      : '<span class="has-text-grey-light">None</span>';
+    const hostsHTML = acl.allowed_hosts && acl.allowed_hosts.length > 0
+      ? `<div class="tag-list">${acl.allowed_hosts.map(h => `<span class="tag tag-info">${escapeHtml(h)}</span>`).join('')}</div>`
+      : '<span class="tag tag-secondary">None</span>';
     
-    const userIds = acl.user_ids && acl.user_ids.length > 0
-      ? `<div class="tag-list">${acl.user_ids.map(u => `<span class="tag is-warning">${u}</span>`).join('')}</div>`
-      : '<span class="has-text-grey-light">None</span>';
+    const userIdsHTML = acl.user_ids && acl.user_ids.length > 0
+      ? `<div class="tag-list">${acl.user_ids.map(u => `<span class="tag tag-warning">${escapeHtml(u)}</span>`).join('')}</div>`
+      : '<span class="tag tag-secondary">None</span>';
     
-    const ttl = acl.ttl 
-      ? `<span class="tag is-light">${new Date(acl.ttl).toLocaleString()}</span>`
-      : '<span class="has-text-grey-light">Never</span>';
+    const ttlHTML = acl.ttl 
+      ? `<span class="tag tag-info">${formatDate(new Date(acl.ttl))}</span>`
+      : '<span class="tag tag-secondary">Never</span>';
     
-    tbody.append(`
-      <tr>
-        <td><strong>${acl.ip_address}</strong></td>
-        <td>${allowAllBadge}</td>
-        <td>${hosts}</td>
-        <td>${userIds}</td>
-        <td>${ttl}</td>
-        <td>
-          <div class="buttons">
-            <button class="button is-small is-info edit-acl-btn" data-ip="${acl.ip_address}">
-              <span class="icon is-small"><i class="fas fa-edit"></i></span>
-            </button>
-            <button class="button is-small is-danger delete-acl-btn" data-ip="${acl.ip_address}">
-              <span class="icon is-small"><i class="fas fa-trash"></i></span>
-            </button>
+    const card = $(`
+      <div class="item-card">
+        <div class="item-header">
+          <div class="item-title">
+            <div class="item-name">${escapeHtml(acl.ip_address)}</div>
+            <div class="item-subtitle">IP Access Control</div>
           </div>
-        </td>
-      </tr>
+        </div>
+        
+        <div class="item-details">
+          <div class="item-detail">
+            <div class="detail-label">Allow All</div>
+            <div class="detail-value">${allowAllTag}</div>
+          </div>
+          <div class="item-detail">
+            <div class="detail-label">Allowed Hosts</div>
+            <div class="detail-value">${hostsHTML}</div>
+          </div>
+          <div class="item-detail">
+            <div class="detail-label">User IDs</div>
+            <div class="detail-value">${userIdsHTML}</div>
+          </div>
+          <div class="item-detail">
+            <div class="detail-label">TTL Expiration</div>
+            <div class="detail-value">${ttlHTML}</div>
+          </div>
+        </div>
+        
+        <div class="item-actions">
+          <button class="btn btn-primary edit-acl-btn" data-ip="${acl.ip_address}">
+            <i class="fi fi-rr-edit"></i>
+            <span>Edit</span>
+          </button>
+          <button class="btn btn-danger delete-acl-btn" data-ip="${acl.ip_address}">
+            <i class="fi fi-rr-trash"></i>
+            <span>Delete</span>
+          </button>
+        </div>
+      </div>
     `);
+    
+    container.append(card);
   });
   
   // Bind edit buttons
@@ -196,11 +232,11 @@ function openACLModal(isEdit = false, acl = null) {
     $('#acl-ttl').val('');
   }
   
-  $('#acl-modal').addClass('is-active');
+  $('#acl-modal').show();
 }
 
 function closeACLModal() {
-  $('#acl-modal').removeClass('is-active');
+  $('#acl-modal').hide();
   currentACLEdit = null;
 }
 
@@ -212,7 +248,7 @@ function saveACL() {
   const ttl = $('#acl-ttl').val().trim();
   
   if (!ip) {
-    showNotification('IP address is required', 'danger');
+    showNotification('IP address is required', 'error');
     return;
   }
   
@@ -252,7 +288,7 @@ function saveACL() {
       loadACLs();
     },
     error: function(xhr) {
-      showNotification(`Failed to ${isEdit ? 'update' : 'create'} ACL: ${xhr.responseJSON?.error || 'Unknown error'}`, 'danger');
+      showNotification(`Failed to ${isEdit ? 'update' : 'create'} ACL: ${xhr.responseJSON?.error || 'Unknown error'}`, 'error');
     }
   });
 }
@@ -266,7 +302,7 @@ function editACL(ip) {
       openACLModal(true, acl);
     },
     error: function(xhr) {
-      showNotification(`Failed to load ACL: ${xhr.responseJSON?.error || 'Unknown error'}`, 'danger');
+      showNotification(`Failed to load ACL: ${xhr.responseJSON?.error || 'Unknown error'}`, 'error');
     }
   });
 }
@@ -285,7 +321,7 @@ function deleteACL(ip) {
       loadACLs();
     },
     error: function(xhr) {
-      showNotification(`Failed to delete ACL: ${xhr.responseJSON?.error || 'Unknown error'}`, 'danger');
+      showNotification(`Failed to delete ACL: ${xhr.responseJSON?.error || 'Unknown error'}`, 'error');
     }
   });
 }
@@ -295,73 +331,105 @@ function deleteACL(ip) {
 // ============================================================================
 
 function loadUsers() {
+  $('#user-loading').show();
+  $('#users-container').empty();
+  
   $.ajax({
     type: 'GET',
     url: `${API_BASE}/user`,
     headers: { 'Admin-Secret': adminSecret },
     success: function(data) {
-      renderUsers(data);
+      allUsers = data || [];
+      renderUsers(allUsers);
+      updateStats();
+      updateLastUpdated('user-last-updated');
+      $('#user-loading').hide();
     },
     error: function(xhr) {
-      $('#users-table-body').html(`
-        <tr>
-          <td colspan="7" class="has-text-centered has-text-danger">
-            Failed to load users: ${xhr.responseJSON?.error || 'Unknown error'}
-          </td>
-        </tr>
+      $('#user-loading').hide();
+      $('#users-container').html(`
+        <div class="message message-error">
+          Failed to load users: ${xhr.responseJSON?.error || 'Unknown error'}
+        </div>
       `);
     }
   });
 }
 
 function renderUsers(users) {
-  const tbody = $('#users-table-body');
+  const container = $('#users-container');
+  container.empty();
   
   if (!users || users.length === 0) {
-    tbody.html(`
-      <tr>
-        <td colspan="7" class="has-text-centered has-text-grey-light">
-          No users found. Click "Add User" to create one.
-        </td>
-      </tr>
+    container.html(`
+      <div class="message message-info">
+        <i class="fi fi-rr-info"></i>
+        <span>No users found. Click "Add User" to create one.</span>
+      </div>
     `);
     return;
   }
   
-  tbody.empty();
   users.forEach(user => {
-    const enabledBadge = user.enabled
-      ? '<span class="tag is-success">Yes</span>'
-      : '<span class="tag is-danger">No</span>';
+    const enabledTag = user.enabled
+      ? '<span class="tag tag-success">Enabled</span>'
+      : '<span class="tag tag-danger">Disabled</span>';
     
-    const allowAllBadge = user.acl_allow_all 
-      ? '<span class="tag is-success">Yes</span>' 
-      : '<span class="tag">No</span>';
+    const allowAllTag = user.acl_allow_all 
+      ? '<span class="tag tag-success">Yes</span>' 
+      : '<span class="tag tag-secondary">No</span>';
     
-    const hosts = user.acl_allowed_hosts && user.acl_allowed_hosts.length > 0
-      ? `<div class="tag-list">${user.acl_allowed_hosts.map(h => `<span class="tag is-info">${h}</span>`).join('')}</div>`
-      : '<span class="has-text-grey-light">None</span>';
+    const hostsHTML = user.acl_allowed_hosts && user.acl_allowed_hosts.length > 0
+      ? `<div class="tag-list">${user.acl_allowed_hosts.map(h => `<span class="tag tag-info">${escapeHtml(h)}</span>`).join('')}</div>`
+      : '<span class="tag tag-secondary">None</span>';
     
-    tbody.append(`
-      <tr>
-        <td><code>${user.id}</code></td>
-        <td>${enabledBadge}</td>
-        <td>${user.description || '<span class="has-text-grey-light">N/A</span>'}</td>
-        <td>${allowAllBadge}</td>
-        <td>${hosts}</td>
-        <td>${user.ttl_minutes || 0}</td>
-        <td>
-          <div class="buttons">
-            <button class="button is-small is-info edit-user-btn" data-id="${user.id}">
-              <span class="icon is-small"><i class="fas fa-edit"></i></span>
-            </button>
-            <button class="button is-small is-danger delete-user-btn" data-id="${user.id}">
-              <span class="icon is-small"><i class="fas fa-trash"></i></span>
-            </button>
+    const dnsHTML = user.dns_names && user.dns_names.length > 0
+      ? `<div class="tag-list">${user.dns_names.map(d => `<span class="tag tag-warning">${escapeHtml(d)}</span>`).join('')}</div>`
+      : '<span class="tag tag-secondary">None</span>';
+    
+    const card = $(`
+      <div class="item-card">
+        <div class="item-header">
+          <div class="item-title">
+            <div class="item-name"><code>${escapeHtml(user.id)}</code></div>
+            <div class="item-subtitle">${escapeHtml(user.description || 'No description')}</div>
           </div>
-        </td>
-      </tr>
+          ${enabledTag}
+        </div>
+        
+        <div class="item-details">
+          <div class="item-detail">
+            <div class="detail-label">ACL Allow All</div>
+            <div class="detail-value">${allowAllTag}</div>
+          </div>
+          <div class="item-detail">
+            <div class="detail-label">ACL Allowed Hosts</div>
+            <div class="detail-value">${hostsHTML}</div>
+          </div>
+          <div class="item-detail">
+            <div class="detail-label">DNS Names</div>
+            <div class="detail-value">${dnsHTML}</div>
+          </div>
+          <div class="item-detail">
+            <div class="detail-label">TTL Minutes</div>
+            <div class="detail-value"><span class="tag tag-info">${user.ttl_minutes || 0}</span></div>
+          </div>
+        </div>
+        
+        <div class="item-actions">
+          <button class="btn btn-primary edit-user-btn" data-id="${user.id}">
+            <i class="fi fi-rr-edit"></i>
+            <span>Edit</span>
+          </button>
+          <button class="btn btn-danger delete-user-btn" data-id="${user.id}">
+            <i class="fi fi-rr-trash"></i>
+            <span>Delete</span>
+          </button>
+        </div>
+      </div>
     `);
+    
+    container.append(card);
   });
   
   // Bind edit buttons
@@ -382,7 +450,7 @@ function openUserModal(isEdit = false, user = null) {
   
   if (isEdit && user) {
     $('#user-modal-title').text('Edit User');
-    $('#user-secret').val('').prop('disabled', true).closest('.field').hide();
+    $('#user-secret-field').hide();
     $('#user-enabled').prop('checked', user.enabled);
     $('#user-description').val(user.description || '');
     $('#user-acl-allow-all').prop('checked', user.acl_allow_all);
@@ -391,7 +459,8 @@ function openUserModal(isEdit = false, user = null) {
     $('#user-ttl-minutes').val(user.ttl_minutes || '');
   } else {
     $('#user-modal-title').text('Add User');
-    $('#user-secret').val('').prop('disabled', false).closest('.field').show();
+    $('#user-secret-field').show();
+    $('#user-secret').val('');
     $('#user-enabled').prop('checked', true);
     $('#user-description').val('');
     $('#user-acl-allow-all').prop('checked', false);
@@ -400,11 +469,11 @@ function openUserModal(isEdit = false, user = null) {
     $('#user-ttl-minutes').val('');
   }
   
-  $('#user-modal').addClass('is-active');
+  $('#user-modal').show();
 }
 
 function closeUserModal() {
-  $('#user-modal').removeClass('is-active');
+  $('#user-modal').hide();
   currentUserEdit = null;
 }
 
@@ -420,7 +489,7 @@ function saveUser() {
   const isEdit = currentUserEdit !== null;
   
   if (!isEdit && !secret) {
-    showNotification('Secret is required for new users', 'danger');
+    showNotification('Secret is required for new users', 'error');
     return;
   }
   
@@ -463,7 +532,7 @@ function saveUser() {
       loadUsers();
     },
     error: function(xhr) {
-      showNotification(`Failed to ${isEdit ? 'update' : 'create'} user: ${xhr.responseJSON?.error || 'Unknown error'}`, 'danger');
+      showNotification(`Failed to ${isEdit ? 'update' : 'create'} user: ${xhr.responseJSON?.error || 'Unknown error'}`, 'error');
     }
   });
 }
@@ -477,7 +546,7 @@ function editUser(id) {
       openUserModal(true, user);
     },
     error: function(xhr) {
-      showNotification(`Failed to load user: ${xhr.responseJSON?.error || 'Unknown error'}`, 'danger');
+      showNotification(`Failed to load user: ${xhr.responseJSON?.error || 'Unknown error'}`, 'error');
     }
   });
 }
@@ -496,9 +565,34 @@ function deleteUser(id) {
       loadUsers();
     },
     error: function(xhr) {
-      showNotification(`Failed to delete user: ${xhr.responseJSON?.error || 'Unknown error'}`, 'danger');
+      showNotification(`Failed to delete user: ${xhr.responseJSON?.error || 'Unknown error'}`, 'error');
     }
   });
+}
+
+// ============================================================================
+// Utility Functions
+// ============================================================================
+
+function formatDate(date) {
+  return date.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+function updateLastUpdated(elementId) {
+  const now = new Date();
+  $(`#${elementId}`).text(`Last updated: ${formatDate(now)}`);
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
 }
 
 // ============================================================================
@@ -517,9 +611,6 @@ $(document).ready(function() {
   // Initialize tabs
   initTabs();
   
-  // Initialize notifications
-  initNotificationClose();
-  
   // ACL buttons
   $('#add-acl-btn').on('click', () => openACLModal(false));
   $('#refresh-acls-btn').on('click', loadACLs);
@@ -530,14 +621,10 @@ $(document).ready(function() {
   $('#refresh-users-btn').on('click', loadUsers);
   $('#save-user-btn').on('click', saveUser);
   
-  // Modal close buttons
-  $('.modal .delete, .cancel-modal').on('click', function() {
-    $(this).closest('.modal').removeClass('is-active');
-  });
-  
   // Close modal on background click
-  $('.modal-background').on('click', function() {
-    $(this).closest('.modal').removeClass('is-active');
+  $('.modal').on('click', function(e) {
+    if (e.target === this) {
+      $(this).hide();
+    }
   });
 });
-

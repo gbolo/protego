@@ -1,350 +1,241 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Protego Admin</title>
-    <link rel="icon" type="image/png" href="/assets/favicon.png" />
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.8.0/css/bulma.min.css">
-    <script defer src="https://use.fontawesome.com/releases/v5.3.1/js/all.js"></script>
-    <style>
-      .pad-right {
-        padding-right: 10px;
-      }
-      .content-section {
-        display: none;
-      }
-      .content-section.is-active {
-        display: block;
-      }
-      .modal-card {
-        max-width: 640px;
-      }
-      .table-container {
-        overflow-x: auto;
-      }
-      .tag-list {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.25rem;
-      }
-      .is-fullheight-with-navbar {
-        min-height: calc(100vh - 52px);
-      }
-      .notification.is-hidden {
-        display: none;
-      }
-      pre {
-        background-color: #f5f5f5;
-        padding: 1rem;
-        border-radius: 4px;
-      }
-    </style>
-  </head>
-  <body>
-
-  <nav class="navbar is-dark" role="navigation" aria-label="main navigation">
+    <link rel='stylesheet' href='https://cdn-uicons.flaticon.com/2.6.0/uicons-regular-rounded/css/uicons-regular-rounded.css'>
+    <link rel='stylesheet' href='https://cdn-uicons.flaticon.com/2.6.0/uicons-bold-rounded/css/uicons-bold-rounded.css'>
+    <link rel="icon" type="image/png" href="/assets/favicon.png">
+    <link rel="stylesheet" href="/admin.css">
+</head>
+<body>
     <div class="container">
-      <div class="navbar-brand">
-        <a class="navbar-item has-text-white is-size-4 has-text-weight-bold" href="/">
-          <img src="/assets/protego-logo.png" class="pad-right">Protego Admin
-        </a>
-      </div>
-      <div class="navbar-menu">
-        <div class="navbar-end">
-          <span class="navbar-item">
-            <a class="button is-white is-outlined" href="/">
-              <span class="icon">
-                <i class="fa fa-home"></i>
-              </span>
-              <span>Home</span>
-            </a>
-          </span>
-          <span class="navbar-item">
-            <a class="button is-white is-outlined" href="/swagger">
-              <span class="icon">
-                <i class="fas fa-laptop-code"></i>
-              </span>
-              <span>Swagger</span>
-            </a>
-          </span>
-        </div>
-      </div>
-    </div>
-  </nav>
+        <header>
+            <div class="header-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/>
+                </svg>
+            </div>
+            <h1>Protego Administration</h1>
+            <p class="subtitle">Manage ACLs and Users</p>
+        </header>
 
-  <section class="section is-fullheight-with-navbar">
-    <div class="container">
-      
-      <!-- Admin Secret Input -->
-      <div id="auth-section">
-        <div class="columns is-centered">
-          <div class="column is-half">
-            <div class="box">
-              <h1 class="title">Admin Authentication</h1>
-              <div class="field">
-                <label class="label">Admin Secret</label>
-                <div class="control has-icons-left">
-                  <input class="input" type="password" id="admin-secret" placeholder="Enter admin secret">
-                  <span class="icon is-small is-left">
-                    <i class="fas fa-lock"></i>
-                  </span>
+        <!-- Authentication Section -->
+        <div id="auth-section">
+            <div class="auth-card">
+                <h2><i class="fi fi-rr-lock"></i> Admin Authentication</h2>
+                <div class="form-group">
+                    <label>Admin Secret</label>
+                    <input type="password" id="admin-secret" placeholder="Enter admin secret">
                 </div>
-              </div>
-              <div class="field">
-                <div class="control">
-                  <button class="button is-primary is-fullwidth" id="auth-button">
-                    Authenticate
-                  </button>
+                <button class="btn btn-primary btn-block" id="auth-button">
+                    <i class="fi fi-rr-unlock"></i>
+                    <span>Authenticate</span>
+                </button>
+                <div id="auth-error" class="message message-error" style="display: none;"></div>
+            </div>
+        </div>
+
+        <!-- Dashboard Section -->
+        <div id="dashboard-section" style="display: none;">
+            
+            <!-- Stats Cards -->
+            <div class="stats-container" id="stats">
+                <div class="stat-card">
+                    <div class="stat-value" id="totalACLs">-</div>
+                    <div class="stat-label">Total ACLs</div>
                 </div>
-              </div>
-              <div id="auth-error" class="notification is-danger is-hidden">
-                <button class="delete"></button>
-                Authentication failed. Please check your admin secret.
-              </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="totalUsers">-</div>
+                    <div class="stat-label">Total Users</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="enabledUsers">-</div>
+                    <div class="stat-label">Enabled Users</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="disabledUsers">-</div>
+                    <div class="stat-label">Disabled Users</div>
+                </div>
             </div>
-          </div>
-        </div>
-      </div>
 
-      <!-- Main Admin Dashboard (hidden until authenticated) -->
-      <div id="dashboard-section" style="display: none;">
-        
-        <!-- Global Notification -->
-        <div id="global-notification" class="notification is-hidden">
-          <button class="delete"></button>
-          <span id="notification-message"></span>
-        </div>
+            <!-- Global Notification -->
+            <div id="global-notification" class="message" style="display: none;"></div>
 
-        <!-- Tabs -->
-        <div class="tabs is-boxed is-large">
-          <ul>
-            <li class="is-active" data-tab="acls">
-              <a>
-                <span class="icon is-small"><i class="fas fa-shield-alt"></i></span>
-                <span>ACLs</span>
-              </a>
-            </li>
-            <li data-tab="users">
-              <a>
-                <span class="icon is-small"><i class="fas fa-users"></i></span>
-                <span>Users</span>
-              </a>
-            </li>
-          </ul>
-        </div>
-
-        <!-- ACL Content -->
-        <div id="acls-content" class="content-section is-active">
-          <div class="level">
-            <div class="level-left">
-              <div class="level-item">
-                <h2 class="title">Access Control Lists</h2>
-              </div>
-            </div>
-            <div class="level-right">
-              <div class="level-item">
-                <button class="button is-primary" id="add-acl-btn">
-                  <span class="icon"><i class="fas fa-plus"></i></span>
-                  <span>Add ACL</span>
+            <!-- Tabs -->
+            <div class="tabs">
+                <button class="tab active" data-tab="acls">
+                    <i class="fi fi-rr-shield-check"></i>
+                    <span>ACLs</span>
                 </button>
-              </div>
-              <div class="level-item">
-                <button class="button is-info" id="refresh-acls-btn">
-                  <span class="icon"><i class="fas fa-sync"></i></span>
-                  <span>Refresh</span>
+                <button class="tab" data-tab="users">
+                    <i class="fi fi-rr-users-alt"></i>
+                    <span>Users</span>
                 </button>
-              </div>
             </div>
-          </div>
 
-          <div class="table-container">
-            <table class="table is-fullwidth is-striped is-hoverable">
-              <thead>
-                <tr>
-                  <th>IP Address</th>
-                  <th>Allow All</th>
-                  <th>Allowed Hosts</th>
-                  <th>User IDs</th>
-                  <th>TTL</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody id="acls-table-body">
-                <tr>
-                  <td colspan="6" class="has-text-centered">
-                    <span class="icon"><i class="fas fa-spinner fa-pulse"></i></span>
-                    Loading...
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+            <!-- ACL Content -->
+            <div id="acls-content" class="content-section active">
+                <div class="action-bar">
+                    <div class="action-buttons">
+                        <button class="action-btn btn-primary" id="add-acl-btn">
+                            <i class="fi fi-rr-plus"></i>
+                            <span>Add ACL</span>
+                        </button>
+                        <button class="action-btn btn-secondary" id="refresh-acls-btn">
+                            <i class="fi fi-rr-refresh"></i>
+                            <span>Refresh</span>
+                        </button>
+                    </div>
+                    <span class="last-updated" id="acl-last-updated"></span>
+                </div>
+
+                <div id="acl-loading" class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading ACLs...</p>
+                </div>
+
+                <div id="acls-container" class="items-container"></div>
+            </div>
+
+            <!-- Users Content -->
+            <div id="users-content" class="content-section">
+                <div class="action-bar">
+                    <div class="action-buttons">
+                        <button class="action-btn btn-primary" id="add-user-btn">
+                            <i class="fi fi-rr-user-add"></i>
+                            <span>Add User</span>
+                        </button>
+                        <button class="action-btn btn-secondary" id="refresh-users-btn">
+                            <i class="fi fi-rr-refresh"></i>
+                            <span>Refresh</span>
+                        </button>
+                    </div>
+                    <span class="last-updated" id="user-last-updated"></span>
+                </div>
+
+                <div id="user-loading" class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading Users...</p>
+                </div>
+
+                <div id="users-container" class="items-container"></div>
+            </div>
+
         </div>
-
-        <!-- Users Content -->
-        <div id="users-content" class="content-section">
-          <div class="level">
-            <div class="level-left">
-              <div class="level-item">
-                <h2 class="title">User Management</h2>
-              </div>
-            </div>
-            <div class="level-right">
-              <div class="level-item">
-                <button class="button is-primary" id="add-user-btn">
-                  <span class="icon"><i class="fas fa-plus"></i></span>
-                  <span>Add User</span>
-                </button>
-              </div>
-              <div class="level-item">
-                <button class="button is-info" id="refresh-users-btn">
-                  <span class="icon"><i class="fas fa-sync"></i></span>
-                  <span>Refresh</span>
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div class="table-container">
-            <table class="table is-fullwidth is-striped is-hoverable">
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Enabled</th>
-                  <th>Description</th>
-                  <th>Allow All</th>
-                  <th>Allowed Hosts</th>
-                  <th>TTL (min)</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody id="users-table-body">
-                <tr>
-                  <td colspan="7" class="has-text-centered">
-                    <span class="icon"><i class="fas fa-spinner fa-pulse"></i></span>
-                    Loading...
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-      </div>
     </div>
-  </section>
 
-  <!-- ACL Modal -->
-  <div id="acl-modal" class="modal">
-    <div class="modal-background"></div>
-    <div class="modal-card">
-      <header class="modal-card-head">
-        <p class="modal-card-title" id="acl-modal-title">Add ACL</p>
-        <button class="delete" aria-label="close"></button>
-      </header>
-      <section class="modal-card-body">
-        <div class="field">
-          <label class="label">IP Address *</label>
-          <div class="control">
-            <input class="input" type="text" id="acl-ip" placeholder="192.168.1.100">
-          </div>
+    <!-- ACL Modal -->
+    <div id="acl-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeACLModal()">&times;</span>
+            <h2 id="acl-modal-title">Add ACL</h2>
+            
+            <div class="form-group">
+                <label>IP Address *</label>
+                <input type="text" id="acl-ip" placeholder="192.168.1.100">
+            </div>
+
+            <div class="form-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="acl-allow-all">
+                    <span>Allow All Hosts</span>
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label>Allowed Hosts <span class="help-text">(comma-separated)</span></label>
+                <input type="text" id="acl-allowed-hosts" placeholder="git.example.com, wiki.example.com">
+            </div>
+
+            <div class="form-group">
+                <label>User IDs <span class="help-text">(comma-separated)</span></label>
+                <input type="text" id="acl-user-ids" placeholder="user1, user2">
+            </div>
+
+            <div class="form-group">
+                <label>TTL <span class="help-text">(RFC3339 format)</span></label>
+                <input type="text" id="acl-ttl" placeholder="2025-12-31T23:59:59Z">
+                <small>Leave empty for no expiration</small>
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn btn-primary" id="save-acl-btn">
+                    <i class="fi fi-rr-disk"></i>
+                    <span>Save</span>
+                </button>
+                <button class="btn btn-secondary" onclick="closeACLModal()">Cancel</button>
+            </div>
         </div>
-        <div class="field">
-          <label class="checkbox">
-            <input type="checkbox" id="acl-allow-all">
-            Allow All
-          </label>
-        </div>
-        <div class="field">
-          <label class="label">Allowed Hosts (comma-separated)</label>
-          <div class="control">
-            <input class="input" type="text" id="acl-allowed-hosts" placeholder="git.example.com, wiki.example.com">
-          </div>
-        </div>
-        <div class="field">
-          <label class="label">User IDs (comma-separated)</label>
-          <div class="control">
-            <input class="input" type="text" id="acl-user-ids" placeholder="user1, user2">
-          </div>
-        </div>
-        <div class="field">
-          <label class="label">TTL (RFC3339 format)</label>
-          <div class="control">
-            <input class="input" type="text" id="acl-ttl" placeholder="2025-12-31T23:59:59Z">
-          </div>
-          <p class="help">Leave empty for no expiration</p>
-        </div>
-      </section>
-      <footer class="modal-card-foot">
-        <button class="button is-success" id="save-acl-btn">Save</button>
-        <button class="button cancel-modal">Cancel</button>
-      </footer>
     </div>
-  </div>
 
-  <!-- User Modal -->
-  <div id="user-modal" class="modal">
-    <div class="modal-background"></div>
-    <div class="modal-card">
-      <header class="modal-card-head">
-        <p class="modal-card-title" id="user-modal-title">Add User</p>
-        <button class="delete" aria-label="close"></button>
-      </header>
-      <section class="modal-card-body">
-        <div class="field">
-          <label class="label">Secret * (required for new users)</label>
-          <div class="control">
-            <input class="input" type="password" id="user-secret" placeholder="User secret">
-          </div>
+    <!-- User Modal -->
+    <div id="user-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeUserModal()">&times;</span>
+            <h2 id="user-modal-title">Add User</h2>
+            
+            <div class="form-group" id="user-secret-field">
+                <label>Secret * <span class="help-text">(required for new users)</span></label>
+                <input type="password" id="user-secret" placeholder="User secret">
+            </div>
+
+            <div class="form-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="user-enabled" checked>
+                    <span>Enabled</span>
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label>Description</label>
+                <input type="text" id="user-description" placeholder="John Doe">
+            </div>
+
+            <div class="form-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="user-acl-allow-all">
+                    <span>ACL Allow All</span>
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label>ACL Allowed Hosts <span class="help-text">(comma-separated)</span></label>
+                <input type="text" id="user-acl-allowed-hosts" placeholder="git.example.com, wiki.example.com">
+            </div>
+
+            <div class="form-group">
+                <label>DNS Names <span class="help-text">(comma-separated)</span></label>
+                <input type="text" id="user-dns-names" placeholder="myhome.no-ip.info">
+            </div>
+
+            <div class="form-group">
+                <label>TTL Minutes</label>
+                <input type="number" id="user-ttl-minutes" placeholder="60">
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn btn-primary" id="save-user-btn">
+                    <i class="fi fi-rr-disk"></i>
+                    <span>Save</span>
+                </button>
+                <button class="btn btn-secondary" onclick="closeUserModal()">Cancel</button>
+            </div>
         </div>
-        <div class="field">
-          <label class="checkbox">
-            <input type="checkbox" id="user-enabled" checked>
-            Enabled
-          </label>
-        </div>
-        <div class="field">
-          <label class="label">Description</label>
-          <div class="control">
-            <input class="input" type="text" id="user-description" placeholder="John Doe">
-          </div>
-        </div>
-        <div class="field">
-          <label class="checkbox">
-            <input type="checkbox" id="user-acl-allow-all">
-            ACL Allow All
-          </label>
-        </div>
-        <div class="field">
-          <label class="label">ACL Allowed Hosts (comma-separated)</label>
-          <div class="control">
-            <input class="input" type="text" id="user-acl-allowed-hosts" placeholder="git.example.com, wiki.example.com">
-          </div>
-        </div>
-        <div class="field">
-          <label class="label">DNS Names (comma-separated)</label>
-          <div class="control">
-            <input class="input" type="text" id="user-dns-names" placeholder="myhome.no-ip.info">
-          </div>
-        </div>
-        <div class="field">
-          <label class="label">TTL Minutes</label>
-          <div class="control">
-            <input class="input" type="number" id="user-ttl-minutes" placeholder="60">
-          </div>
-        </div>
-      </section>
-      <footer class="modal-card-foot">
-        <button class="button is-success" id="save-user-btn">Save</button>
-        <button class="button cancel-modal">Cancel</button>
-      </footer>
     </div>
-  </div>
 
-  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
-  <script src="/admin.js"></script>
+    <footer>
+        <p>Protego Administration Panel</p>
+        <p class="footer-link">
+            <a href="/" rel="noopener noreferrer">
+                <i class="fi fi-rr-home"></i>
+                Back to Home
+            </a>
+        </p>
+    </footer>
 
-  </body>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+    <script src="/admin.js"></script>
+</body>
 </html>
-

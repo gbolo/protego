@@ -1,3 +1,4 @@
 .idea
 bin/*
 testdata/db/*.db
+protego

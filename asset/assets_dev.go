@@ -1,3 +1,4 @@
+//go:build dev
 // +build dev
 
 // This ONLY gets compiled when using the go build tag "dev"
