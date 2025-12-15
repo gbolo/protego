@@ -61,6 +61,8 @@ func getBenchmarkProvider(b *testing.B, impl string) Provider {
 				return
 			}
 			log.Debugf("created temp file: %s", boltDbFile.Name())
+			// Close the file; Bolt will open it itself.
+			_ = boltDbFile.Close()
 
 			// init bolt with temp file
 			viper.Set("db.bolt.file", boltDbFile.Name())
@@ -97,7 +99,7 @@ func getBenchmarkProvider(b *testing.B, impl string) Provider {
 
 // ---------- helpers ----------
 
-func newTestUser(id string) *User {
+func newTestUserBench(id string) *User {
 	return &User{
 		Enabled:         true,
 		Description:     "benchmark user " + id,
@@ -111,7 +113,7 @@ func newTestUser(id string) *User {
 	}
 }
 
-func newTestACL() *ACL {
+func newTestACLBench() *ACL {
 	ttl := time.Now().Add(1 * time.Hour)
 	return &ACL{
 		AllowAll:     false,
@@ -162,7 +164,7 @@ func benchmarkAddUserParallel(b *testing.B, p Provider) {
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			id := nextUserID("bench-add-user")
-			if err := p.AddUser(newTestUser(id)); err != nil {
+			if err := p.AddUser(newTestUserBench(id)); err != nil {
 				b.Fatalf("AddUser(%s): %v", id, err)
 			}
 		}
@@ -176,7 +178,7 @@ func benchmarkGetUserParallel(b *testing.B, p Provider) {
 	// Prepopulate unique users for this benchmark.
 	for i := 0; i < numUsers; i++ {
 		id := nextUserID("bench-get-user")
-		if err := p.AddUser(newTestUser(id)); err != nil {
+		if err := p.AddUser(newTestUserBench(id)); err != nil {
 			b.Fatalf("AddUser(%s): %v", id, err)
 		}
 		ids[i] = id
@@ -201,7 +203,7 @@ func benchmarkGetAllUsers(b *testing.B, p Provider) {
 	const numUsers = 50_000
 	for i := 0; i < numUsers; i++ {
 		id := nextUserID("bench-all-user")
-		if err := p.AddUser(newTestUser(id)); err != nil {
+		if err := p.AddUser(newTestUserBench(id)); err != nil {
 			b.Fatalf("AddUser(%s): %v", id, err)
 		}
 	}
@@ -223,7 +225,7 @@ func benchmarkAddIpParallel(b *testing.B, p Provider) {
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			ip := nextIPForBench(1) // namespace "1" for this benchmark
-			if err := p.AddIp(ip, newTestACL()); err != nil {
+			if err := p.AddIp(ip, newTestACLBench()); err != nil {
 				b.Fatalf("AddIp(%s): %v", ip, err)
 			}
 		}
@@ -237,7 +239,7 @@ func benchmarkGetACLParallel(b *testing.B, p Provider) {
 	// Prepopulate IPs for this benchmark (AddIp runs *before* GetACL).
 	for i := 0; i < numEntries; i++ {
 		ip := ipForIndex(2, i) // namespace "2" so we don't collide with AddIp benchmark IPs
-		if err := p.AddIp(ip, newTestACL()); err != nil {
+		if err := p.AddIp(ip, newTestACLBench()); err != nil {
 			b.Fatalf("AddIp(%s): %v", ip, err)
 		}
 		ips[i] = ip
