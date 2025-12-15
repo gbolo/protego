@@ -146,6 +146,7 @@ func handlerChallenge(w http.ResponseWriter, req *http.Request) {
 	newAcl := dataprovider.ACL{
 		AllowAll:     actualUser.ACLAllowAll,
 		AllowedHosts: actualUser.ACLAllowedHosts,
+		UserIDs:      []string{actualUser.ID},
 	}
 	if actualUser.TTLMinutes > 0 {
 		ttl := time.Now().Add(time.Duration(actualUser.TTLMinutes) * time.Minute)
@@ -163,7 +164,7 @@ func handlerChallenge(w http.ResponseWriter, req *http.Request) {
 
 	// log a warning if we will be merging a different user ACLs together
 	if existingAcl != nil && !existingAcl.CheckUserId(user.ID) {
-		log.Warningf("other user(s) [%v] already have an ACL for client IP: %s. Will need to merge ACls", existingAcl.UserIDs, clientIP)
+		log.Warningf("other user(s) %v already have an ACL for client IP: %s. Will need to merge ACls", existingAcl.UserIDs, clientIP)
 	}
 
 	acl := dataprovider.MergeACL(&newAcl, existingAcl)
