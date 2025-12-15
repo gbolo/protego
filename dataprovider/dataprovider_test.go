@@ -283,18 +283,18 @@ func TestProvider_ACLCRUD(t *testing.T) {
 				t.Fatalf("GetACL after update mismatch:\nwant: %+v\n got: %+v", acl, got2)
 			}
 
-			//// GetAllACLs should contain this IP
-			//all, err := p.GetAllACLs()
-			//if err != nil {
-			//	t.Fatalf("GetAllACLs: %v", err)
-			//}
-			//gotACL, ok := all[ip]
-			//if !ok {
-			//	t.Fatalf("GetAllACLs: expected ACL for IP %q", ip)
-			//}
-			//if !reflect.DeepEqual(acl, gotACL) {
-			//	t.Fatalf("GetAllACLs[IP] mismatch:\nwant: %+v\n got: %+v", acl, gotACL)
-			//}
+			// GetAllACLs should contain this IP
+			all, err := p.GetAllACLs()
+			if err != nil {
+				t.Fatalf("GetAllACLs: %v", err)
+			}
+			gotACL, ok := all[ip]
+			if !ok {
+				t.Fatalf("GetAllACLs: expected ACL for IP %q", ip)
+			}
+			if !equalACL(acl, gotACL) {
+				t.Fatalf("GetAllACLs[IP] mismatch:\nwant: %+v\n got: %+v", acl, gotACL)
+			}
 
 			// Delete
 			if err := p.RemoveIp(ip); err != nil {
