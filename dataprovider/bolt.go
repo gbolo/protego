@@ -27,6 +27,9 @@ func NewBoltProvider() (p BoltProvider, err error) {
 
 func (p *BoltProvider) InitializeDatabase() (err error) {
 	boltDbFile := viper.GetString("db.bolt.file")
+	if p.dbHandle != nil {
+		return
+	}
 	p.dbHandle, err = bolt.Open(boltDbFile, 0600, &bolt.Options{
 		NoGrowSync: false,
 		//FreelistType: bolt.FreelistArrayType,
