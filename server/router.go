@@ -95,6 +95,41 @@ var routes = Routes{
 		getEndpoint("user"),
 		handlerUserGetAll,
 	},
+
+	Route{
+		"ACLAdd",
+		"POST",
+		getEndpoint("acl/{ip}"),
+		handlerACLAdd,
+	},
+
+	Route{
+		"ACLUpdate",
+		"PUT",
+		getEndpoint("acl/{ip}"),
+		handlerACLUpdate,
+	},
+
+	Route{
+		"ACLDelete",
+		"DELETE",
+		getEndpoint("acl/{ip}"),
+		handlerACLDelete,
+	},
+
+	Route{
+		"ACLGet",
+		"GET",
+		getEndpoint("acl/{ip}"),
+		handlerACLGet,
+	},
+
+	Route{
+		"ACLsGetAll",
+		"GET",
+		getEndpoint("acl"),
+		handlerACLGetAll,
+	},
 }
 
 func newRouter() *mux.Router {

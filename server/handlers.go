@@ -405,6 +405,289 @@ func handlerUserDelete(w http.ResponseWriter, req *http.Request) {
 	writeJSONResponse(w, http.StatusOK, getUserConvert(user))
 }
 
+// handlerACLAdd godoc
+// @Summary Add a new ACL for an IP address
+// @Description add ACL by json for a specific IP address
+// @Tags ACL
+// @Accept  json
+// @Produce  json
+// @Param Admin-Secret header string true "Admin Secret"
+// @Param ip path string true "IP Address"
+// @Param acl body server.addACL true "Add ACL"
+// @Success 200 {object} server.getACL
+// @Router /acl/{ip} [post]
+func handlerACLAdd(w http.ResponseWriter, req *http.Request) {
+	// validate authorization header if enabled
+	if viper.GetString("admin.secret") != "" && req.Header.Get("Admin-Secret") != viper.GetString("admin.secret") {
+		log.Warningf("admin credentials rejected")
+		writeJSONResponse(w, http.StatusUnauthorized, errorResponse{"admin credentials rejected"})
+		return
+	}
+
+	// get IP from URL path
+	vars := mux.Vars(req)
+	ipAddress := vars["ip"]
+	if !validate.IsIP(ipAddress) {
+		log.Errorf("invalid IP address provided: %s", ipAddress)
+		writeJSONResponse(w, http.StatusBadRequest, errorResponse{"invalid IP address"})
+		return
+	}
+
+	// try to read the body
+	body, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		apiResponse := errorResponse{"Bad request. Cannot read request body."}
+		writeJSONResponse(w, http.StatusBadRequest, apiResponse)
+		return
+	}
+
+	// try to unmarshal the body into a valid ACL
+	var aclReq addACL
+	err = json.Unmarshal(body, &aclReq)
+	if err != nil {
+		log.Errorf("unable to decode ACL: %v", err)
+		apiResponse := errorResponse{"Bad request: " + err.Error()}
+		writeJSONResponse(w, http.StatusBadRequest, apiResponse)
+		return
+	}
+
+	// convert to dataprovider.ACL
+	acl := &dataprovider.ACL{
+		AllowAll:     aclReq.AllowAll,
+		AllowedHosts: aclReq.AllowedHosts,
+		UserIDs:      aclReq.UserIDs,
+	}
+
+	// parse TTL if provided
+	if aclReq.TTL != nil {
+		ttl, err := time.Parse(time.RFC3339, *aclReq.TTL)
+		if err != nil {
+			log.Errorf("unable to parse TTL: %v", err)
+			apiResponse := errorResponse{"Bad request: invalid TTL format (use RFC3339)"}
+			writeJSONResponse(w, http.StatusBadRequest, apiResponse)
+			return
+		}
+		acl.TTL = &ttl
+	}
+
+	// add the ACL to the backend now
+	err = dataProvider.AddIp(ipAddress, acl)
+	if err != nil {
+		log.Errorf("couldn't add new ACL: %v", err)
+		apiResponse := errorResponse{"Could not add ACL"}
+		writeJSONResponse(w, http.StatusInternalServerError, apiResponse)
+		return
+	}
+
+	// ACL has been added
+	log.Infof("new ACL has been added for IP: %s", ipAddress)
+	writeJSONResponse(w, http.StatusOK, getACLConvert(ipAddress, acl))
+}
+
+// handlerACLUpdate godoc
+// @Summary Update an existing ACL for an IP address
+// @Description update ACL by json for a specific IP address
+// @Tags ACL
+// @Accept  json
+// @Produce  json
+// @Param Admin-Secret header string true "Admin Secret"
+// @Param ip path string true "IP Address"
+// @Param acl body server.modifyACL true "Update ACL"
+// @Success 200 {object} server.getACL
+// @Router /acl/{ip} [put]
+func handlerACLUpdate(w http.ResponseWriter, req *http.Request) {
+	// validate authorization header if enabled
+	if viper.GetString("admin.secret") != "" && req.Header.Get("Admin-Secret") != viper.GetString("admin.secret") {
+		log.Warningf("admin credentials rejected")
+		writeJSONResponse(w, http.StatusUnauthorized, errorResponse{"admin credentials rejected"})
+		return
+	}
+
+	// get IP from URL path
+	vars := mux.Vars(req)
+	ipAddress := vars["ip"]
+	if !validate.IsIP(ipAddress) {
+		log.Errorf("invalid IP address provided: %s", ipAddress)
+		writeJSONResponse(w, http.StatusBadRequest, errorResponse{"invalid IP address"})
+		return
+	}
+
+	// check if ACL exists
+	existingACL, err := dataProvider.GetACL(ipAddress)
+	if existingACL == nil || err != nil {
+		log.Warningf("ACL was not found for IP: %s", ipAddress)
+		writeJSONResponse(w, http.StatusNotFound, errorResponse{"ACL was not found"})
+		return
+	}
+
+	// try to read the body
+	body, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		apiResponse := errorResponse{"Bad request. Cannot read request body."}
+		writeJSONResponse(w, http.StatusBadRequest, apiResponse)
+		return
+	}
+
+	// try to unmarshal the body into a valid ACL
+	var aclReq modifyACL
+	err = json.Unmarshal(body, &aclReq)
+	if err != nil {
+		log.Errorf("unable to decode ACL: %v", err)
+		apiResponse := errorResponse{"Bad request: " + err.Error()}
+		writeJSONResponse(w, http.StatusBadRequest, apiResponse)
+		return
+	}
+
+	// convert to dataprovider.ACL
+	acl := &dataprovider.ACL{
+		AllowAll:     aclReq.AllowAll,
+		AllowedHosts: aclReq.AllowedHosts,
+		UserIDs:      aclReq.UserIDs,
+	}
+
+	// parse TTL if provided
+	if aclReq.TTL != nil {
+		ttl, err := time.Parse(time.RFC3339, *aclReq.TTL)
+		if err != nil {
+			log.Errorf("unable to parse TTL: %v", err)
+			apiResponse := errorResponse{"Bad request: invalid TTL format (use RFC3339)"}
+			writeJSONResponse(w, http.StatusBadRequest, apiResponse)
+			return
+		}
+		acl.TTL = &ttl
+	}
+
+	// update the ACL in the backend
+	err = dataProvider.UpdateACL(ipAddress, acl)
+	if err != nil {
+		log.Errorf("could not update ACL: %v", err)
+		apiResponse := errorResponse{"Could not update ACL"}
+		writeJSONResponse(w, http.StatusInternalServerError, apiResponse)
+		return
+	}
+
+	// ACL has been updated
+	log.Infof("ACL has been updated for IP: %s", ipAddress)
+	writeJSONResponse(w, http.StatusOK, getACLConvert(ipAddress, acl))
+}
+
+// handlerACLGet godoc
+// @Summary Retrieve an ACL for a specific IP address
+// @Description get ACL by IP address
+// @Tags ACL
+// @Produce json
+// @Param Admin-Secret header string true "Admin Secret"
+// @Param ip path string true "IP Address"
+// @Success 200 {object} server.getACL
+// @Router /acl/{ip} [get]
+func handlerACLGet(w http.ResponseWriter, req *http.Request) {
+	// validate authorization header if enabled
+	if viper.GetString("admin.secret") != "" && req.Header.Get("Admin-Secret") != viper.GetString("admin.secret") {
+		log.Warningf("admin credentials rejected")
+		writeJSONResponse(w, http.StatusUnauthorized, errorResponse{"admin credentials rejected"})
+		return
+	}
+
+	// get IP from URL path
+	vars := mux.Vars(req)
+	ipAddress := vars["ip"]
+	if !validate.IsIP(ipAddress) {
+		log.Errorf("invalid IP address provided: %s", ipAddress)
+		writeJSONResponse(w, http.StatusBadRequest, errorResponse{"invalid IP address"})
+		return
+	}
+
+	// get the ACL
+	acl, err := dataProvider.GetACL(ipAddress)
+	if acl == nil || err != nil {
+		log.Warningf("ACL was not found for IP: %s", ipAddress)
+		writeJSONResponse(w, http.StatusNotFound, errorResponse{"ACL was not found"})
+		return
+	}
+
+	writeJSONResponse(w, http.StatusOK, getACLConvert(ipAddress, acl))
+}
+
+// handlerACLGetAll godoc
+// @Summary Retrieve all ACLs
+// @Description get all ACLs
+// @Tags ACL
+// @Produce json
+// @Param Admin-Secret header string true "Admin Secret"
+// @Success 200 {array} server.getACL
+// @Router /acl [get]
+func handlerACLGetAll(w http.ResponseWriter, req *http.Request) {
+	// validate authorization header if enabled
+	if viper.GetString("admin.secret") != "" && req.Header.Get("Admin-Secret") != viper.GetString("admin.secret") {
+		log.Warningf("admin credentials rejected")
+		writeJSONResponse(w, http.StatusUnauthorized, errorResponse{"admin credentials rejected"})
+		return
+	}
+
+	acls, err := dataProvider.GetAllACLs()
+	if err != nil {
+		log.Warningf("could not get all ACLs: %v", err)
+		writeJSONResponse(w, http.StatusServiceUnavailable, errorResponse{"could not retrieve all ACLs"})
+		return
+	}
+
+	// convert map to slice
+	if len(acls) == 0 {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`[]`))
+		return
+	}
+
+	writeJSONResponse(w, http.StatusOK, getAllACLsConvert(acls))
+}
+
+// handlerACLDelete godoc
+// @Summary Remove an ACL for a specific IP address
+// @Description remove an ACL by IP address
+// @Tags ACL
+// @Produce json
+// @Param Admin-Secret header string true "Admin Secret"
+// @Param ip path string true "IP Address"
+// @Success 200 {object} server.getACL
+// @Router /acl/{ip} [delete]
+func handlerACLDelete(w http.ResponseWriter, req *http.Request) {
+	// validate authorization header if enabled
+	if viper.GetString("admin.secret") != "" && req.Header.Get("Admin-Secret") != viper.GetString("admin.secret") {
+		log.Warningf("admin credentials rejected")
+		writeJSONResponse(w, http.StatusUnauthorized, errorResponse{"admin credentials rejected"})
+		return
+	}
+
+	// get IP from URL path
+	vars := mux.Vars(req)
+	ipAddress := vars["ip"]
+	if !validate.IsIP(ipAddress) {
+		log.Errorf("invalid IP address provided: %s", ipAddress)
+		writeJSONResponse(w, http.StatusBadRequest, errorResponse{"invalid IP address"})
+		return
+	}
+
+	// check if ACL exists
+	acl, err := dataProvider.GetACL(ipAddress)
+	if acl == nil || err != nil {
+		log.Warningf("ACL was not found for IP: %s", ipAddress)
+		writeJSONResponse(w, http.StatusNotFound, errorResponse{"ACL was not found"})
+		return
+	}
+
+	// remove the ACL
+	err = dataProvider.RemoveIp(ipAddress)
+	if err != nil {
+		log.Warningf("unable to remove ACL for IP %s: %v", ipAddress, err)
+		writeJSONResponse(w, http.StatusInternalServerError, errorResponse{"unable to remove ACL"})
+		return
+	}
+
+	// ACL has been removed
+	log.Infof("ACL has been removed for IP: %s", ipAddress)
+	writeJSONResponse(w, http.StatusOK, getACLConvert(ipAddress, acl))
+}
+
 // wrapper for json responses
 func writeJSONResponse(w http.ResponseWriter, status int, body interface{}) {
 	w.Header().Set("Content-Type", "application/json")

@@ -558,3 +558,354 @@ func TestHandlerUserAdd_UnauthorizedWithoutAdminSecret(t *testing.T) {
 		t.Fatalf("expected error message in errorResponse, got: %#v", errResp)
 	}
 }
+
+// -----------------------------------------------------------------------------
+// ACL CRUD: Add → Get → Update → Get → GetAll → Delete → Get (fail)
+// -----------------------------------------------------------------------------
+
+func TestHandlerACLCRUD(t *testing.T) {
+	setupTestAPI(t)
+
+	const testIP = "192.168.1.100"
+
+	// ---------- 1. Add ACL via POST /acl/{ip} ----------
+
+	ttlStr := "2025-12-31T23:59:59Z"
+	createReqBody := addACL{
+		AllowAll:     false,
+		AllowedHosts: []string{"git.example.com", "wiki.example.com"},
+		TTL:          &ttlStr,
+		UserIDs:      []string{"user1", "user2"},
+	}
+
+	createBytes, err := json.Marshal(createReqBody)
+	if err != nil {
+		t.Fatalf("json.Marshal addACL: %v", err)
+	}
+
+	createReq := httptest.NewRequest(http.MethodPost, "/acl/"+testIP, bytes.NewReader(createBytes))
+	createReq.Header.Set("Content-Type", "application/json")
+	createReq.Header.Set("Admin-Secret", "test-admin-secret")
+	createReq = mux.SetURLVars(createReq, map[string]string{"ip": testIP})
+
+	createRR := httptest.NewRecorder()
+	handlerACLAdd(createRR, createReq)
+
+	if createRR.Code != http.StatusOK {
+		t.Fatalf("handlerACLAdd status = %d, want %d; body=%q",
+			createRR.Code, http.StatusOK, createRR.Body.String())
+	}
+
+	var created getACL
+	decodeJSON(t, createRR.Body, &created)
+
+	if created.IPAddress != testIP {
+		t.Fatalf("expected created ACL to have IPAddress %q, got: %q", testIP, created.IPAddress)
+	}
+	if created.AllowAll != createReqBody.AllowAll {
+		t.Fatalf("AllowAll mismatch: got %v want %v",
+			created.AllowAll, createReqBody.AllowAll)
+	}
+	if len(created.AllowedHosts) != len(createReqBody.AllowedHosts) {
+		t.Fatalf("AllowedHosts length mismatch: got %d want %d",
+			len(created.AllowedHosts), len(createReqBody.AllowedHosts))
+	}
+	if len(created.UserIDs) != len(createReqBody.UserIDs) {
+		t.Fatalf("UserIDs length mismatch: got %d want %d",
+			len(created.UserIDs), len(createReqBody.UserIDs))
+	}
+
+	// ---------- 2. Get ACL via GET /acl/{ip} ----------
+
+	getReq := httptest.NewRequest(http.MethodGet, "/acl/"+testIP, nil)
+	getReq.Header.Set("Admin-Secret", "test-admin-secret")
+	getReq = mux.SetURLVars(getReq, map[string]string{"ip": testIP})
+
+	getRR := httptest.NewRecorder()
+	handlerACLGet(getRR, getReq)
+
+	if getRR.Code != http.StatusOK {
+		t.Fatalf("handlerACLGet status = %d, want %d; body=%q",
+			getRR.Code, http.StatusOK, getRR.Body.String())
+	}
+
+	var fetched getACL
+	decodeJSON(t, getRR.Body, &fetched)
+
+	if fetched.IPAddress != testIP {
+		t.Fatalf("GET /acl/{ip}: IPAddress mismatch: got %q want %q", fetched.IPAddress, testIP)
+	}
+	if fetched.AllowAll != createReqBody.AllowAll {
+		t.Fatalf("GET /acl/{ip}: AllowAll mismatch: got %v want %v",
+			fetched.AllowAll, createReqBody.AllowAll)
+	}
+
+	// ---------- 3. Update ACL via PUT /acl/{ip} ----------
+
+	ttlStr2 := "2026-01-01T00:00:00Z"
+	updateReqBody := modifyACL{
+		AllowAll:     true,
+		AllowedHosts: []string{"git.example.com", "wiki.example.com", "app.example.com"},
+		TTL:          &ttlStr2,
+		UserIDs:      []string{"user1", "user2", "user3"},
+	}
+	updateBytes, err := json.Marshal(updateReqBody)
+	if err != nil {
+		t.Fatalf("json.Marshal modifyACL: %v", err)
+	}
+
+	updateReq := httptest.NewRequest(http.MethodPut, "/acl/"+testIP, bytes.NewReader(updateBytes))
+	updateReq.Header.Set("Content-Type", "application/json")
+	updateReq.Header.Set("Admin-Secret", "test-admin-secret")
+	updateReq = mux.SetURLVars(updateReq, map[string]string{"ip": testIP})
+
+	updateRR := httptest.NewRecorder()
+	handlerACLUpdate(updateRR, updateReq)
+
+	if updateRR.Code != http.StatusOK {
+		t.Fatalf("handlerACLUpdate status = %d, want %d; body=%q",
+			updateRR.Code, http.StatusOK, updateRR.Body.String())
+	}
+
+	var updated getACL
+	decodeJSON(t, updateRR.Body, &updated)
+
+	if updated.IPAddress != testIP {
+		t.Fatalf("Update: IPAddress changed: got %q want %q", updated.IPAddress, testIP)
+	}
+	if updated.AllowAll != updateReqBody.AllowAll {
+		t.Fatalf("Update: AllowAll mismatch: got %v want %v",
+			updated.AllowAll, updateReqBody.AllowAll)
+	}
+	if len(updated.AllowedHosts) != len(updateReqBody.AllowedHosts) {
+		t.Fatalf("Update: AllowedHosts length mismatch: got %d want %d",
+			len(updated.AllowedHosts), len(updateReqBody.AllowedHosts))
+	}
+	if len(updated.UserIDs) != len(updateReqBody.UserIDs) {
+		t.Fatalf("Update: UserIDs length mismatch: got %d want %d",
+			len(updated.UserIDs), len(updateReqBody.UserIDs))
+	}
+
+	// ---------- 4. GetAll ACLs via GET /acl ----------
+
+	getAllReq := httptest.NewRequest(http.MethodGet, "/acl", nil)
+	getAllReq.Header.Set("Admin-Secret", "test-admin-secret")
+
+	getAllRR := httptest.NewRecorder()
+	handlerACLGetAll(getAllRR, getAllReq)
+
+	if getAllRR.Code != http.StatusOK {
+		t.Fatalf("handlerACLGetAll status = %d, want %d; body=%q",
+			getAllRR.Code, http.StatusOK, getAllRR.Body.String())
+	}
+
+	var all []getACL
+	decodeJSON(t, getAllRR.Body, &all)
+
+	found := false
+	for _, acl := range all {
+		if acl.IPAddress == testIP {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("GetAll: expected to find ACL for IP %q in list, got: %#v", testIP, all)
+	}
+
+	// ---------- 5. Delete ACL via DELETE /acl/{ip} ----------
+
+	delReq := httptest.NewRequest(http.MethodDelete, "/acl/"+testIP, nil)
+	delReq.Header.Set("Admin-Secret", "test-admin-secret")
+	delReq = mux.SetURLVars(delReq, map[string]string{"ip": testIP})
+
+	delRR := httptest.NewRecorder()
+	handlerACLDelete(delRR, delReq)
+
+	if delRR.Code != http.StatusOK {
+		t.Fatalf("handlerACLDelete status = %d, want %d; body=%q",
+			delRR.Code, http.StatusOK, delRR.Body.String())
+	}
+
+	// ---------- 6. Get after delete should fail with 404 ----------
+
+	getAfterDelReq := httptest.NewRequest(http.MethodGet, "/acl/"+testIP, nil)
+	getAfterDelReq.Header.Set("Admin-Secret", "test-admin-secret")
+	getAfterDelReq = mux.SetURLVars(getAfterDelReq, map[string]string{"ip": testIP})
+
+	getAfterDelRR := httptest.NewRecorder()
+	handlerACLGet(getAfterDelRR, getAfterDelReq)
+
+	if getAfterDelRR.Code != http.StatusNotFound {
+		t.Fatalf("GET /acl/{ip} after delete: status = %d, want %d; body=%q",
+			getAfterDelRR.Code, http.StatusNotFound, getAfterDelRR.Body.String())
+	}
+}
+
+// -----------------------------------------------------------------------------
+// ACL negative tests
+// -----------------------------------------------------------------------------
+
+func TestHandlerACLAdd_InvalidIP(t *testing.T) {
+	setupTestAPI(t)
+
+	const invalidIP = "not-an-ip"
+
+	createReqBody := addACL{
+		AllowAll:     false,
+		AllowedHosts: []string{"git.example.com"},
+	}
+
+	createBytes, err := json.Marshal(createReqBody)
+	if err != nil {
+		t.Fatalf("json.Marshal addACL: %v", err)
+	}
+
+	createReq := httptest.NewRequest(http.MethodPost, "/acl/"+invalidIP, bytes.NewReader(createBytes))
+	createReq.Header.Set("Content-Type", "application/json")
+	createReq.Header.Set("Admin-Secret", "test-admin-secret")
+	createReq = mux.SetURLVars(createReq, map[string]string{"ip": invalidIP})
+
+	createRR := httptest.NewRecorder()
+	handlerACLAdd(createRR, createReq)
+
+	if createRR.Code != http.StatusBadRequest {
+		t.Fatalf("handlerACLAdd (invalid IP) status = %d, want %d; body=%q",
+			createRR.Code, http.StatusBadRequest, createRR.Body.String())
+	}
+
+	var errResp errorResponse
+	decodeJSON(t, createRR.Body, &errResp)
+	if errResp.Error == "" {
+		t.Fatalf("expected error message in errorResponse, got: %#v", errResp)
+	}
+}
+
+func TestHandlerACLAdd_InvalidTTL(t *testing.T) {
+	setupTestAPI(t)
+
+	const testIP = "192.168.1.101"
+	invalidTTL := "not-a-date"
+
+	createReqBody := addACL{
+		AllowAll:     false,
+		AllowedHosts: []string{"git.example.com"},
+		TTL:          &invalidTTL,
+	}
+
+	createBytes, err := json.Marshal(createReqBody)
+	if err != nil {
+		t.Fatalf("json.Marshal addACL: %v", err)
+	}
+
+	createReq := httptest.NewRequest(http.MethodPost, "/acl/"+testIP, bytes.NewReader(createBytes))
+	createReq.Header.Set("Content-Type", "application/json")
+	createReq.Header.Set("Admin-Secret", "test-admin-secret")
+	createReq = mux.SetURLVars(createReq, map[string]string{"ip": testIP})
+
+	createRR := httptest.NewRecorder()
+	handlerACLAdd(createRR, createReq)
+
+	if createRR.Code != http.StatusBadRequest {
+		t.Fatalf("handlerACLAdd (invalid TTL) status = %d, want %d; body=%q",
+			createRR.Code, http.StatusBadRequest, createRR.Body.String())
+	}
+
+	var errResp errorResponse
+	decodeJSON(t, createRR.Body, &errResp)
+	if errResp.Error == "" {
+		t.Fatalf("expected error message in errorResponse, got: %#v", errResp)
+	}
+}
+
+func TestHandlerACL_UnauthorizedWithoutAdminSecret(t *testing.T) {
+	setupTestAPI(t)
+
+	const testIP = "192.168.1.102"
+
+	createReqBody := addACL{
+		AllowAll:     false,
+		AllowedHosts: []string{"git.example.com"},
+	}
+
+	b, err := json.Marshal(createReqBody)
+	if err != nil {
+		t.Fatalf("json.Marshal addACL: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/acl/"+testIP, bytes.NewReader(b))
+	req.Header.Set("Content-Type", "application/json")
+	req = mux.SetURLVars(req, map[string]string{"ip": testIP})
+	// NOTE: no Admin-Secret header
+
+	rr := httptest.NewRecorder()
+	handlerACLAdd(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("handlerACLAdd (no Admin-Secret) status = %d, want %d; body=%q",
+			rr.Code, http.StatusUnauthorized, rr.Body.String())
+	}
+
+	var errResp errorResponse
+	decodeJSON(t, rr.Body, &errResp)
+	if errResp.Error == "" {
+		t.Fatalf("expected error message in errorResponse, got: %#v", errResp)
+	}
+}
+
+func TestHandlerACLUpdate_NotFound(t *testing.T) {
+	setupTestAPI(t)
+
+	const testIP = "192.168.1.103"
+
+	updateReqBody := modifyACL{
+		AllowAll:     true,
+		AllowedHosts: []string{"git.example.com"},
+	}
+
+	updateBytes, err := json.Marshal(updateReqBody)
+	if err != nil {
+		t.Fatalf("json.Marshal modifyACL: %v", err)
+	}
+
+	updateReq := httptest.NewRequest(http.MethodPut, "/acl/"+testIP, bytes.NewReader(updateBytes))
+	updateReq.Header.Set("Content-Type", "application/json")
+	updateReq.Header.Set("Admin-Secret", "test-admin-secret")
+	updateReq = mux.SetURLVars(updateReq, map[string]string{"ip": testIP})
+
+	updateRR := httptest.NewRecorder()
+	handlerACLUpdate(updateRR, updateReq)
+
+	if updateRR.Code != http.StatusNotFound {
+		t.Fatalf("handlerACLUpdate (non-existent ACL) status = %d, want %d; body=%q",
+			updateRR.Code, http.StatusNotFound, updateRR.Body.String())
+	}
+
+	var errResp errorResponse
+	decodeJSON(t, updateRR.Body, &errResp)
+	if errResp.Error == "" {
+		t.Fatalf("expected error message in errorResponse, got: %#v", errResp)
+	}
+}
+
+func TestHandlerACLGetAll_Empty(t *testing.T) {
+	setupTestAPI(t)
+
+	// Don't add any ACLs, just try to get all
+
+	getAllReq := httptest.NewRequest(http.MethodGet, "/acl", nil)
+	getAllReq.Header.Set("Admin-Secret", "test-admin-secret")
+
+	getAllRR := httptest.NewRecorder()
+	handlerACLGetAll(getAllRR, getAllReq)
+
+	if getAllRR.Code != http.StatusOK {
+		t.Fatalf("handlerACLGetAll status = %d, want %d; body=%q",
+			getAllRR.Code, http.StatusOK, getAllRR.Body.String())
+	}
+
+	// Should return empty array (no newline for empty arrays)
+	if getAllRR.Body.String() != "[]" {
+		t.Fatalf("expected empty array, got: %q", getAllRR.Body.String())
+	}
+}

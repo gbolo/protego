@@ -67,6 +67,41 @@ type errorResponse struct {
 	Error string `json:"error"`
 }
 
+type addACL struct {
+	// when true, client is allowed to access everything
+	AllowAll bool `json:"allow_all" example:"false"`
+	// represents a list of host headers the client is allowed to access
+	AllowedHosts []string `json:"allowed_hosts,omitempty" example:"git.example.com,wiki.example.com"`
+	// after this date, the ACL is no longer valid (RFC3339 format)
+	TTL *string `json:"ttl,omitempty" example:"2025-12-31T23:59:59Z"`
+	// Users associated with this ACL
+	UserIDs []string `json:"user_ids,omitempty" example:"5e8848,a3f129"`
+}
+
+type modifyACL struct {
+	// when true, client is allowed to access everything
+	AllowAll bool `json:"allow_all" example:"false"`
+	// represents a list of host headers the client is allowed to access
+	AllowedHosts []string `json:"allowed_hosts,omitempty" example:"git.example.com,wiki.example.com"`
+	// after this date, the ACL is no longer valid (RFC3339 format)
+	TTL *string `json:"ttl,omitempty" example:"2025-12-31T23:59:59Z"`
+	// Users associated with this ACL
+	UserIDs []string `json:"user_ids,omitempty" example:"5e8848,a3f129"`
+}
+
+type getACL struct {
+	// IP address this ACL applies to
+	IPAddress string `json:"ip_address" example:"192.168.1.100"`
+	// when true, client is allowed to access everything
+	AllowAll bool `json:"allow_all" example:"false"`
+	// represents a list of host headers the client is allowed to access
+	AllowedHosts []string `json:"allowed_hosts,omitempty" example:"git.example.com,wiki.example.com"`
+	// after this date, the ACL is no longer valid (RFC3339 format)
+	TTL *string `json:"ttl,omitempty" example:"2025-12-31T23:59:59Z"`
+	// Users associated with this ACL
+	UserIDs []string `json:"user_ids,omitempty" example:"5e8848,a3f129"`
+}
+
 func getUserConvert(user *dataprovider.User) getUser {
 	return getUser{
 		ID:              user.ID,
@@ -90,6 +125,27 @@ func getAllUsersConvert(users []dataprovider.User) (getUsers []getUser) {
 			DNSNames:        user.DNSNames,
 			TTLMinutes:      user.TTLMinutes,
 		})
+	}
+	return
+}
+
+func getACLConvert(ipAddress string, acl *dataprovider.ACL) getACL {
+	result := getACL{
+		IPAddress:    ipAddress,
+		AllowAll:     acl.AllowAll,
+		AllowedHosts: acl.AllowedHosts,
+		UserIDs:      acl.UserIDs,
+	}
+	if acl.TTL != nil {
+		ttlStr := acl.TTL.Format("2006-01-02T15:04:05Z07:00")
+		result.TTL = &ttlStr
+	}
+	return result
+}
+
+func getAllACLsConvert(acls map[string]*dataprovider.ACL) (getACLs []getACL) {
+	for ip, acl := range acls {
+		getACLs = append(getACLs, getACLConvert(ip, acl))
 	}
 	return
 }
