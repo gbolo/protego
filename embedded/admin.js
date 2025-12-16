@@ -187,7 +187,6 @@ function renderACLs(acls) {
       <div>Allowed Hosts</div>
       <div>User IDs</div>
       <div>Expires</div>
-      <div>Actions</div>
     </div>
   `);
   
@@ -218,57 +217,105 @@ function renderACLs(acls) {
       ? formatTTL(acl.ttl)
       : '<span class="tag tag-secondary">∞</span>';
     
+    // Determine risk level for allow_all ACLs
+    let riskClass = '';
+    if (acl.allow_all) {
+      if (!acl.ttl) {
+        // No expiration - highest risk
+        riskClass = 'risk-high';
+      } else {
+        const now = new Date();
+        const expiry = new Date(acl.ttl);
+        const daysUntilExpiry = (expiry - now) / (1000 * 60 * 60 * 24);
+        
+        if (daysUntilExpiry > 30) {
+          // More than 30 days - high risk
+          riskClass = 'risk-high';
+        } else if (daysUntilExpiry > 0) {
+          // Less than 30 days but not expired - medium risk
+          riskClass = 'risk-medium';
+        }
+      }
+    }
+    
     const row = $(`
-      <div class="acl-row">
-        <div class="acl-ip">${escapeHtml(acl.ip_address)}</div>
+      <div class="acl-row ${riskClass}" data-ip="${escapeHtml(acl.ip_address)}">
+        <div class="acl-ip clickable-ip">${escapeHtml(acl.ip_address)}</div>
         <div class="acl-access">${allowAllTag}</div>
         <div class="acl-hosts">${hostsHTML}</div>
         <div class="acl-users">${userIdsHTML}</div>
         <div class="acl-ttl">${ttlHTML}</div>
-        <div class="acl-actions">
-          <button class="btn btn-primary edit-acl-btn" data-ip="${acl.ip_address}">
-            <i class="fi fi-rr-edit"></i>
-          </button>
-          <button class="btn btn-danger delete-acl-btn" data-ip="${acl.ip_address}">
-            <i class="fi fi-rr-trash"></i>
-          </button>
-        </div>
       </div>
     `);
     
     container.append(row);
   });
   
-  // Bind edit buttons
-  $('.edit-acl-btn').on('click', function() {
+  // Bind click event to entire row
+  $('.acl-row').on('click', function(e) {
+    // Don't trigger if clicking on a user tag (they have their own tooltip behavior)
+    if ($(e.target).closest('.user-tag-with-tooltip').length > 0) {
+      return;
+    }
+    
     const ip = $(this).data('ip');
     editACL(ip);
   });
+}
+
+function populateUserDropdown() {
+  const select = $('#acl-user-ids');
+  select.empty();
   
-  // Bind delete buttons
-  $('.delete-acl-btn').on('click', function() {
-    const ip = $(this).data('ip');
-    deleteACL(ip);
+  if (!allUsers || allUsers.length === 0) {
+    select.append('<option value="" disabled>No users available</option>');
+    return;
+  }
+  
+  // Filter out disabled users and add them to the dropdown
+  const enabledUsers = allUsers.filter(user => !user.disabled);
+  
+  if (enabledUsers.length === 0) {
+    select.append('<option value="" disabled>No enabled users available</option>');
+    return;
+  }
+  
+  enabledUsers.forEach(user => {
+    const description = user.description ? ` - ${user.description}` : '';
+    select.append(`<option value="${escapeHtml(user.id)}">${escapeHtml(user.id)}${escapeHtml(description)}</option>`);
   });
 }
 
 function openACLModal(isEdit = false, acl = null) {
   currentACLEdit = acl;
   
+  // Populate user dropdown
+  populateUserDropdown();
+  
   if (isEdit && acl) {
     $('#acl-modal-title').text('Edit ACL');
     $('#acl-ip').val(acl.ip_address).prop('disabled', true);
     $('#acl-allow-all').prop('checked', acl.allow_all);
     $('#acl-allowed-hosts').val(acl.allowed_hosts ? acl.allowed_hosts.join(', ') : '');
-    $('#acl-user-ids').val(acl.user_ids ? acl.user_ids.join(', ') : '');
+    
+    // Set selected users in the multi-select
+    const userIds = acl.user_ids || [];
+    $('#acl-user-ids').val(userIds);
+    
     $('#acl-ttl').val(acl.ttl || '');
+    
+    // Show delete button when editing
+    $('#delete-acl-btn').show();
   } else {
     $('#acl-modal-title').text('Add ACL');
     $('#acl-ip').val('').prop('disabled', false);
     $('#acl-allow-all').prop('checked', false);
     $('#acl-allowed-hosts').val('');
-    $('#acl-user-ids').val('');
+    $('#acl-user-ids').val([]);
     $('#acl-ttl').val('');
+    
+    // Hide delete button when adding
+    $('#delete-acl-btn').hide();
   }
   
   $('#acl-modal').show();
@@ -283,7 +330,7 @@ function saveACL() {
   const ip = $('#acl-ip').val().trim();
   const allowAll = $('#acl-allow-all').is(':checked');
   const allowedHostsStr = $('#acl-allowed-hosts').val().trim();
-  const userIdsStr = $('#acl-user-ids').val().trim();
+  const selectedUserIds = $('#acl-user-ids').val(); // This returns an array from multi-select
   const ttl = $('#acl-ttl').val().trim();
   
   if (!ip) {
@@ -295,9 +342,8 @@ function saveACL() {
     ? allowedHostsStr.split(',').map(h => h.trim()).filter(h => h)
     : [];
   
-  const userIds = userIdsStr
-    ? userIdsStr.split(',').map(u => u.trim()).filter(u => u)
-    : [];
+  // selectedUserIds is already an array from the multi-select, or null if nothing selected
+  const userIds = selectedUserIds && selectedUserIds.length > 0 ? selectedUserIds : [];
   
   const aclData = {
     allow_all: allowAll,
@@ -357,6 +403,7 @@ function deleteACL(ip) {
     headers: { 'Admin-Secret': adminSecret },
     success: function() {
       showNotification('ACL deleted successfully', 'success');
+      closeACLModal();
       refreshAll();
     },
     error: function(xhr) {
@@ -709,6 +756,104 @@ function escapeHtml(text) {
 }
 
 // ============================================================================
+// Filtering
+// ============================================================================
+
+function applyACLFilters() {
+  const ipFilter = $('#filter-acl-ip').val().toLowerCase().trim();
+  const userFilter = $('#filter-acl-user').val().toLowerCase().trim();
+  const statusFilter = $('#filter-acl-status').val();
+  
+  const now = new Date();
+  
+  const filtered = allACLs.filter(acl => {
+    // IP filter
+    if (ipFilter && !acl.ip_address.toLowerCase().includes(ipFilter)) {
+      return false;
+    }
+    
+    // User ID filter
+    if (userFilter) {
+      const hasMatchingUser = acl.user_ids && acl.user_ids.some(uid => 
+        uid.toLowerCase().includes(userFilter)
+      );
+      if (!hasMatchingUser) {
+        return false;
+      }
+    }
+    
+    // Status filter
+    if (statusFilter && acl.ttl) {
+      const expiry = new Date(acl.ttl);
+      const isExpired = expiry < now;
+      
+      if (statusFilter === 'active' && isExpired) {
+        return false;
+      }
+      if (statusFilter === 'expired' && !isExpired) {
+        return false;
+      }
+    } else if (statusFilter === 'expired') {
+      // If there's no TTL, it never expires, so filter it out when looking for expired ones
+      return false;
+    }
+    
+    return true;
+  });
+  
+  renderACLs(filtered);
+}
+
+function applyUserFilters() {
+  const idFilter = $('#filter-user-id').val().toLowerCase().trim();
+  const descFilter = $('#filter-user-desc').val().toLowerCase().trim();
+  const hasIpsFilter = $('#filter-user-has-ips').val();
+  
+  const filtered = allUsers.filter(user => {
+    // User ID filter
+    if (idFilter && !user.id.toLowerCase().includes(idFilter)) {
+      return false;
+    }
+    
+    // Description filter
+    if (descFilter && !user.description.toLowerCase().includes(descFilter)) {
+      return false;
+    }
+    
+    // Has IPs filter
+    if (hasIpsFilter) {
+      const userIPs = allACLs.filter(acl => acl.user_id === user.id);
+      const hasActiveIPs = userIPs.length > 0;
+      
+      if (hasIpsFilter === 'yes' && !hasActiveIPs) {
+        return false;
+      }
+      if (hasIpsFilter === 'no' && hasActiveIPs) {
+        return false;
+      }
+    }
+    
+    return true;
+  });
+  
+  renderUsers(filtered);
+}
+
+function clearACLFilters() {
+  $('#filter-acl-ip').val('');
+  $('#filter-acl-user').val('');
+  $('#filter-acl-status').val('');
+  applyACLFilters();
+}
+
+function clearUserFilters() {
+  $('#filter-user-id').val('');
+  $('#filter-user-desc').val('');
+  $('#filter-user-has-ips').val('');
+  applyUserFilters();
+}
+
+// ============================================================================
 // Version Info
 // ============================================================================
 
@@ -750,11 +895,28 @@ $(document).ready(function() {
   $('#add-acl-btn').on('click', () => openACLModal(false));
   $('#refresh-acls-btn').on('click', refreshAll);
   $('#save-acl-btn').on('click', saveACL);
+  $('#delete-acl-btn').on('click', function() {
+    if (currentACLEdit && currentACLEdit.ip_address) {
+      deleteACL(currentACLEdit.ip_address);
+    }
+  });
+  
+  // ACL filters
+  $('#filter-acl-ip').on('input', applyACLFilters);
+  $('#filter-acl-user').on('input', applyACLFilters);
+  $('#filter-acl-status').on('change', applyACLFilters);
+  $('#clear-acl-filters').on('click', clearACLFilters);
   
   // User buttons
   $('#add-user-btn').on('click', () => openUserModal(false));
   $('#refresh-users-btn').on('click', refreshAll);
   $('#save-user-btn').on('click', saveUser);
+  
+  // User filters
+  $('#filter-user-id').on('input', applyUserFilters);
+  $('#filter-user-desc').on('input', applyUserFilters);
+  $('#filter-user-has-ips').on('change', applyUserFilters);
+  $('#clear-user-filters').on('click', clearUserFilters);
   
   // Close modal on background click
   $('.modal').on('click', function(e) {

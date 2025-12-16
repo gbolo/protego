@@ -91,6 +91,29 @@
                     <span class="last-updated" id="acl-last-updated"></span>
                 </div>
 
+                <div class="filter-bar">
+                    <div class="filter-group">
+                        <label><i class="fi fi-rr-search"></i> IP Address</label>
+                        <input type="text" id="filter-acl-ip" class="filter-input" placeholder="Filter by IP...">
+                    </div>
+                    <div class="filter-group">
+                        <label><i class="fi fi-rr-user"></i> User ID</label>
+                        <input type="text" id="filter-acl-user" class="filter-input" placeholder="Filter by User ID...">
+                    </div>
+                    <div class="filter-group">
+                        <label><i class="fi fi-rr-calendar"></i> Status</label>
+                        <select id="filter-acl-status" class="filter-input">
+                            <option value="">All</option>
+                            <option value="active">Active</option>
+                            <option value="expired">Expired</option>
+                        </select>
+                    </div>
+                    <button class="filter-clear-btn" id="clear-acl-filters">
+                        <i class="fi fi-rr-cross-small"></i>
+                        Clear Filters
+                    </button>
+                </div>
+
                 <div id="acl-loading" class="loading" style="display: none;">
                     <div class="spinner"></div>
                     <p>Loading ACLs...</p>
@@ -113,6 +136,29 @@
                         </button>
                     </div>
                     <span class="last-updated" id="user-last-updated"></span>
+                </div>
+
+                <div class="filter-bar">
+                    <div class="filter-group">
+                        <label><i class="fi fi-rr-search"></i> User ID</label>
+                        <input type="text" id="filter-user-id" class="filter-input" placeholder="Filter by User ID...">
+                    </div>
+                    <div class="filter-group">
+                        <label><i class="fi fi-rr-document"></i> Description</label>
+                        <input type="text" id="filter-user-desc" class="filter-input" placeholder="Filter by Description...">
+                    </div>
+                    <div class="filter-group">
+                        <label><i class="fi fi-rr-network"></i> Has IPs</label>
+                        <select id="filter-user-has-ips" class="filter-input">
+                            <option value="">All</option>
+                            <option value="yes">With Active IPs</option>
+                            <option value="no">No Active IPs</option>
+                        </select>
+                    </div>
+                    <button class="filter-clear-btn" id="clear-user-filters">
+                        <i class="fi fi-rr-cross-small"></i>
+                        Clear Filters
+                    </button>
                 </div>
 
                 <div id="user-loading" class="loading" style="display: none;">
@@ -150,8 +196,10 @@
             </div>
 
             <div class="form-group">
-                <label>User IDs <span class="help-text">(comma-separated)</span></label>
-                <input type="text" id="acl-user-ids" placeholder="user1, user2">
+                <label>User IDs <span class="help-text">(hold Ctrl/Cmd to select multiple)</span></label>
+                <select id="acl-user-ids" multiple size="8">
+                    <option value="">Loading users...</option>
+                </select>
             </div>
 
             <div class="form-group">
@@ -161,6 +209,11 @@
             </div>
 
             <div class="modal-actions">
+                <button class="btn btn-danger" id="delete-acl-btn" style="display: none;">
+                    <i class="fi fi-rr-trash"></i>
+                    <span>Delete</span>
+                </button>
+                <div style="flex: 1;"></div>
                 <button class="btn btn-primary" id="save-acl-btn">
                     <i class="fi fi-rr-disk"></i>
                     <span>Save</span>
