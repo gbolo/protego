@@ -1,5 +1,31 @@
-basePath: /api/v1
 definitions:
+  server.addACL:
+    properties:
+      allow_all:
+        description: when true, client is allowed to access everything
+        example: false
+        type: boolean
+      allowed_hosts:
+        description: represents a list of host headers the client is allowed to access
+        example:
+        - git.example.com
+        - wiki.example.com
+        items:
+          type: string
+        type: array
+      ttl:
+        description: after this date, the ACL is no longer valid (RFC3339 format)
+        example: "2025-12-31T23:59:59Z"
+        type: string
+      user_ids:
+        description: Users associated with this ACL
+        example:
+        - 5e8848
+        - a3f129
+        items:
+          type: string
+        type: array
+    type: object
   server.addUser:
     properties:
       acl_allow_all:
@@ -40,6 +66,37 @@ definitions:
         example: 60
         type: integer
     type: object
+  server.getACL:
+    properties:
+      allow_all:
+        description: when true, client is allowed to access everything
+        example: false
+        type: boolean
+      allowed_hosts:
+        description: represents a list of host headers the client is allowed to access
+        example:
+        - git.example.com
+        - wiki.example.com
+        items:
+          type: string
+        type: array
+      ip_address:
+        description: IP address this ACL applies to
+        example: 192.168.1.100
+        type: string
+      ttl:
+        description: after this date, the ACL is no longer valid (RFC3339 format)
+        example: "2025-12-31T23:59:59Z"
+        type: string
+      user_ids:
+        description: Users associated with this ACL
+        example:
+        - 5e8848
+        - a3f129
+        items:
+          type: string
+        type: array
+    type: object
   server.getUser:
     properties:
       acl_allow_all:
@@ -79,6 +136,33 @@ definitions:
           for after a successful challenge
         example: 60
         type: integer
+    type: object
+  server.modifyACL:
+    properties:
+      allow_all:
+        description: when true, client is allowed to access everything
+        example: false
+        type: boolean
+      allowed_hosts:
+        description: represents a list of host headers the client is allowed to access
+        example:
+        - git.example.com
+        - wiki.example.com
+        items:
+          type: string
+        type: array
+      ttl:
+        description: after this date, the ACL is no longer valid (RFC3339 format)
+        example: "2025-12-31T23:59:59Z"
+        type: string
+      user_ids:
+        description: Users associated with this ACL
+        example:
+        - 5e8848
+        - a3f129
+        items:
+          type: string
+        type: array
     type: object
   server.modifyUser:
     properties:
@@ -126,17 +210,138 @@ definitions:
         type: string
     type: object
 info:
-  contact:
-    email: gbolo@linuxctl.com
-    name: API Support
-  description: Swagger API for Protego - https://github.com/gbolo/protego
-  license:
-    name: MIT
-    url: https://github.com/gbolo/protego/blob/master/LICENSE
-  termsOfService: http://swagger.io/terms/
-  title: Protego - REST API
-  version: "1.0"
+  contact: {}
 paths:
+  /acl:
+    get:
+      description: get all ACLs
+      parameters:
+      - description: Admin Secret
+        in: header
+        name: Admin-Secret
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/server.getACL'
+            type: array
+      summary: Retrieve all ACLs
+      tags:
+      - ACL
+  /acl/{ip}:
+    delete:
+      description: remove an ACL by IP address
+      parameters:
+      - description: Admin Secret
+        in: header
+        name: Admin-Secret
+        required: true
+        type: string
+      - description: IP Address
+        in: path
+        name: ip
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.getACL'
+      summary: Remove an ACL for a specific IP address
+      tags:
+      - ACL
+    get:
+      description: get ACL by IP address
+      parameters:
+      - description: Admin Secret
+        in: header
+        name: Admin-Secret
+        required: true
+        type: string
+      - description: IP Address
+        in: path
+        name: ip
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.getACL'
+      summary: Retrieve an ACL for a specific IP address
+      tags:
+      - ACL
+    post:
+      consumes:
+      - application/json
+      description: add ACL by json for a specific IP address
+      parameters:
+      - description: Admin Secret
+        in: header
+        name: Admin-Secret
+        required: true
+        type: string
+      - description: IP Address
+        in: path
+        name: ip
+        required: true
+        type: string
+      - description: Add ACL
+        in: body
+        name: acl
+        required: true
+        schema:
+          $ref: '#/definitions/server.addACL'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.getACL'
+      summary: Add a new ACL for an IP address
+      tags:
+      - ACL
+    put:
+      consumes:
+      - application/json
+      description: update ACL by json for a specific IP address
+      parameters:
+      - description: Admin Secret
+        in: header
+        name: Admin-Secret
+        required: true
+        type: string
+      - description: IP Address
+        in: path
+        name: ip
+        required: true
+        type: string
+      - description: Update ACL
+        in: body
+        name: acl
+        required: true
+        schema:
+          $ref: '#/definitions/server.modifyACL'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.getACL'
+      summary: Update an existing ACL for an IP address
+      tags:
+      - ACL
   /authorize:
     get:
       description: Configure NGINX auth_request to this endpoint

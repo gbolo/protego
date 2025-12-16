@@ -401,6 +401,10 @@ select option:checked {
     border-color: rgba(99, 102, 241, 0.5);
 }
 
+.user-card-clickable {
+    cursor: pointer;
+}
+
 /* Compact ACL Row Style (table-like) */
 .acl-row {
     background: var(--surface-color);

@@ -1,21 +1,203 @@
 {
     "swagger": "2.0",
     "info": {
-        "description": "Swagger API for Protego - https://github.com/gbolo/protego",
-        "title": "Protego - REST API",
-        "termsOfService": "http://swagger.io/terms/",
-        "contact": {
-            "name": "API Support",
-            "email": "gbolo@linuxctl.com"
-        },
-        "license": {
-            "name": "MIT",
-            "url": "https://github.com/gbolo/protego/blob/master/LICENSE"
-        },
-        "version": "1.0"
+        "contact": {}
     },
-    "basePath": "/api/v1",
     "paths": {
+        "/acl": {
+            "get": {
+                "description": "get all ACLs",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ACL"
+                ],
+                "summary": "Retrieve all ACLs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Admin Secret",
+                        "name": "Admin-Secret",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/server.getACL"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/acl/{ip}": {
+            "get": {
+                "description": "get ACL by IP address",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ACL"
+                ],
+                "summary": "Retrieve an ACL for a specific IP address",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Admin Secret",
+                        "name": "Admin-Secret",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "IP Address",
+                        "name": "ip",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.getACL"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "update ACL by json for a specific IP address",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ACL"
+                ],
+                "summary": "Update an existing ACL for an IP address",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Admin Secret",
+                        "name": "Admin-Secret",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "IP Address",
+                        "name": "ip",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Update ACL",
+                        "name": "acl",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.modifyACL"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.getACL"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "add ACL by json for a specific IP address",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ACL"
+                ],
+                "summary": "Add a new ACL for an IP address",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Admin Secret",
+                        "name": "Admin-Secret",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "IP Address",
+                        "name": "ip",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Add ACL",
+                        "name": "acl",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.addACL"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.getACL"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "remove an ACL by IP address",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ACL"
+                ],
+                "summary": "Remove an ACL for a specific IP address",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Admin Secret",
+                        "name": "Admin-Secret",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "IP Address",
+                        "name": "ip",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.getACL"
+                        }
+                    }
+                }
+            }
+        },
         "/authorize": {
             "get": {
                 "description": "Configure NGINX auth_request to this endpoint",
@@ -292,6 +474,43 @@
         }
     },
     "definitions": {
+        "server.addACL": {
+            "type": "object",
+            "properties": {
+                "allow_all": {
+                    "description": "when true, client is allowed to access everything",
+                    "type": "boolean",
+                    "example": false
+                },
+                "allowed_hosts": {
+                    "description": "represents a list of host headers the client is allowed to access",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "git.example.com",
+                        "wiki.example.com"
+                    ]
+                },
+                "ttl": {
+                    "description": "after this date, the ACL is no longer valid (RFC3339 format)",
+                    "type": "string",
+                    "example": "2025-12-31T23:59:59Z"
+                },
+                "user_ids": {
+                    "description": "Users associated with this ACL",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "5e8848",
+                        "a3f129"
+                    ]
+                }
+            }
+        },
         "server.addUser": {
             "type": "object",
             "properties": {
@@ -343,6 +562,48 @@
                 }
             }
         },
+        "server.getACL": {
+            "type": "object",
+            "properties": {
+                "allow_all": {
+                    "description": "when true, client is allowed to access everything",
+                    "type": "boolean",
+                    "example": false
+                },
+                "allowed_hosts": {
+                    "description": "represents a list of host headers the client is allowed to access",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "git.example.com",
+                        "wiki.example.com"
+                    ]
+                },
+                "ip_address": {
+                    "description": "IP address this ACL applies to",
+                    "type": "string",
+                    "example": "192.168.1.100"
+                },
+                "ttl": {
+                    "description": "after this date, the ACL is no longer valid (RFC3339 format)",
+                    "type": "string",
+                    "example": "2025-12-31T23:59:59Z"
+                },
+                "user_ids": {
+                    "description": "Users associated with this ACL",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "5e8848",
+                        "a3f129"
+                    ]
+                }
+            }
+        },
         "server.getUser": {
             "type": "object",
             "properties": {
@@ -391,6 +652,43 @@
                     "description": "Represents the number of minutes this User's IP is whitelisted for after a successful challenge",
                     "type": "integer",
                     "example": 60
+                }
+            }
+        },
+        "server.modifyACL": {
+            "type": "object",
+            "properties": {
+                "allow_all": {
+                    "description": "when true, client is allowed to access everything",
+                    "type": "boolean",
+                    "example": false
+                },
+                "allowed_hosts": {
+                    "description": "represents a list of host headers the client is allowed to access",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "git.example.com",
+                        "wiki.example.com"
+                    ]
+                },
+                "ttl": {
+                    "description": "after this date, the ACL is no longer valid (RFC3339 format)",
+                    "type": "string",
+                    "example": "2025-12-31T23:59:59Z"
+                },
+                "user_ids": {
+                    "description": "Users associated with this ACL",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "5e8848",
+                        "a3f129"
+                    ]
                 }
             }
         },

@@ -523,7 +523,7 @@ function renderUsers(users) {
       : '<span class="tag tag-secondary">No active IPs</span>';
     
     const card = $(`
-      <div class="item-card">
+      <div class="item-card user-card-clickable" data-user-id="${escapeHtml(user.id)}">
         <div class="item-header">
           <div class="item-title">
             <div class="item-name"><code>${escapeHtml(user.id)}</code></div>
@@ -554,33 +554,16 @@ function renderUsers(users) {
             <div class="detail-value"><span class="tag tag-info">${user.ttl_minutes || 0}</span></div>
           </div>
         </div>
-        
-        <div class="item-actions">
-          <button class="btn btn-primary edit-user-btn" data-id="${user.id}">
-            <i class="fi fi-rr-edit"></i>
-            <span>Edit</span>
-          </button>
-          <button class="btn btn-danger delete-user-btn" data-id="${user.id}">
-            <i class="fi fi-rr-trash"></i>
-            <span>Delete</span>
-          </button>
-        </div>
       </div>
     `);
     
     container.append(card);
   });
   
-  // Bind edit buttons
-  $('.edit-user-btn').on('click', function() {
-    const id = $(this).data('id');
-    editUser(id);
-  });
-  
-  // Bind delete buttons
-  $('.delete-user-btn').on('click', function() {
-    const id = $(this).data('id');
-    deleteUser(id);
+  // Bind click event to entire card
+  $('.user-card-clickable').on('click', function() {
+    const userId = $(this).data('user-id');
+    editUser(userId);
   });
 }
 
@@ -596,6 +579,9 @@ function openUserModal(isEdit = false, user = null) {
     $('#user-acl-allowed-hosts').val(user.acl_allowed_hosts ? user.acl_allowed_hosts.join(', ') : '');
     $('#user-dns-names').val(user.dns_names ? user.dns_names.join(', ') : '');
     $('#user-ttl-minutes').val(user.ttl_minutes || '');
+    
+    // Show delete button when editing
+    $('#delete-user-btn').show();
   } else {
     $('#user-modal-title').text('Add User');
     $('#user-secret-field').show();
@@ -606,6 +592,9 @@ function openUserModal(isEdit = false, user = null) {
     $('#user-acl-allowed-hosts').val('');
     $('#user-dns-names').val('');
     $('#user-ttl-minutes').val('');
+    
+    // Hide delete button when adding
+    $('#delete-user-btn').hide();
   }
   
   $('#user-modal').show();
@@ -701,6 +690,7 @@ function deleteUser(id) {
     headers: { 'Admin-Secret': adminSecret },
     success: function() {
       showNotification('User deleted successfully', 'success');
+      closeUserModal();
       refreshAll();
     },
     error: function(xhr) {
@@ -930,6 +920,11 @@ $(document).ready(function() {
   $('#add-user-btn').on('click', () => openUserModal(false));
   $('#refresh-users-btn').on('click', refreshAll);
   $('#save-user-btn').on('click', saveUser);
+  $('#delete-user-btn').on('click', function() {
+    if (currentUserEdit && currentUserEdit.id) {
+      deleteUser(currentUserEdit.id);
+    }
+  });
   
   // User filters
   $('#filter-user-id').on('input', applyUserFilters);
