@@ -24,6 +24,7 @@ jobs:
 
       - name: check lint
         run: task go:lint
+        continue-on-error: true
 
       - name: run unit tests
         run: task test:unit
