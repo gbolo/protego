@@ -179,6 +179,25 @@ function renderACLs(acls) {
     return;
   }
   
+  // Sort ACLs: by expiration (longest first), then by access, then by IP
+  const sortedAcls = [...acls].sort((a, b) => {
+    // First, sort by expiration (longest first)
+    const aExpiry = a.ttl ? new Date(a.ttl).getTime() : Infinity;
+    const bExpiry = b.ttl ? new Date(b.ttl).getTime() : Infinity;
+    
+    if (aExpiry !== bExpiry) {
+      return bExpiry - aExpiry; // Longer expiration (or Infinity) comes first
+    }
+    
+    // Second, sort by access (Everything before Limited)
+    if (a.allow_all !== b.allow_all) {
+      return b.allow_all - a.allow_all; // true (1) comes before false (0)
+    }
+    
+    // Finally, sort by IP address
+    return a.ip_address.localeCompare(b.ip_address, undefined, { numeric: true });
+  });
+  
   // Add header row
   container.append(`
     <div class="acl-header">
@@ -190,9 +209,9 @@ function renderACLs(acls) {
     </div>
   `);
   
-  acls.forEach(acl => {
+  sortedAcls.forEach(acl => {
     const allowAllTag = acl.allow_all 
-      ? '<span class="tag tag-success">All</span>' 
+      ? '<span class="tag tag-success">Everything</span>' 
       : '<span class="tag tag-secondary">Limited</span>';
     
     const hostsHTML = acl.allowed_hosts && acl.allowed_hosts.length > 0
@@ -215,7 +234,7 @@ function renderACLs(acls) {
     
     const ttlHTML = acl.ttl 
       ? formatTTL(acl.ttl)
-      : '<span class="tag tag-secondary">∞</span>';
+      : '<span class="tag tag-secondary">∞ Never</span>';
     
     // Determine risk level for allow_all ACLs
     let riskClass = '';
