@@ -7,6 +7,7 @@ tasks:
   default:
     cmds:
       - task: go:lint
+      - task: go:fmt
       - task: test:unit
 
   go:lint:
@@ -18,6 +19,16 @@ tasks:
       - go.mod
     cmds:
       - golangci-lint run
+
+  go:fmt:
+    desc: Runs golangci-lint fmt
+    aliases: [fmt]
+    sources:
+      - './**/*.go'
+      - .golangci.yml
+      - go.mod
+    cmds:
+      - golangci-lint fmt --diff-colored
 
   go:swag:
     desc: Generates swaggger docs

@@ -1,0 +1,32 @@
+name: Pull Request Tests
+
+on:
+  pull_request:
+
+jobs:
+  testing:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup mise
+        uses: jdx/mise-action@v3
+        with:
+          install: true
+          experimental: true
+
+      - name: check fmt
+        run: task go:fmt
+
+      - name: check lint
+        run: task go:lint
+
+      - name: run unit tests
+        run: task test:unit
+
+      - name: run benchmark tests
+        run: task test:bench
