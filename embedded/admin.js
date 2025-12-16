@@ -4,6 +4,8 @@ let currentACLEdit = null;
 let currentUserEdit = null;
 let allACLs = [];
 let allUsers = [];
+let aclsLoaded = false;
+let usersLoaded = false;
 
 // API Base URL
 const API_BASE = '/api/v1';
@@ -29,6 +31,11 @@ function authenticate() {
     success: function() {
       $('#auth-section').hide();
       $('#dashboard-section').show();
+      
+      // Initialize stats with zeros
+      updateStats();
+      
+      // Load data
       loadACLs();
       loadUsers();
     },
@@ -68,10 +75,15 @@ function initTabs() {
 // ============================================================================
 
 function updateStats() {
-  $('#totalACLs').text(allACLs.length);
-  $('#totalUsers').text(allUsers.length);
+  console.log('Updating stats - ACLs:', allACLs.length, 'Users:', allUsers.length);
   
-  const enabledCount = allUsers.filter(u => u.enabled).length;
+  // Update ACL count
+  $('#totalACLs').text(allACLs.length || 0);
+  
+  // Update user counts
+  $('#totalUsers').text(allUsers.length || 0);
+  
+  const enabledCount = allUsers.filter(u => u && u.enabled).length;
   const disabledCount = allUsers.length - enabledCount;
   
   $('#enabledUsers').text(enabledCount);
@@ -96,31 +108,49 @@ function showNotification(message, type = 'success') {
 }
 
 // ============================================================================
+// Refresh All Data
+// ============================================================================
+
+function refreshAll() {
+  loadACLs();
+  loadUsers();
+}
+
+// ============================================================================
 // ACL Management
 // ============================================================================
 
 function loadACLs() {
   $('#acl-loading').show();
-  $('#acls-container').empty();
+  $('#acls-container').hide().empty();
+  aclsLoaded = false;
   
   $.ajax({
     type: 'GET',
     url: `${API_BASE}/acl`,
     headers: { 'Admin-Secret': adminSecret },
     success: function(data) {
-      allACLs = data || [];
+      console.log('ACLs loaded:', data);
+      $('#acl-loading').hide();
+      $('#acls-container').show();
+      allACLs = Array.isArray(data) ? data : [];
+      aclsLoaded = true;
       renderACLs(allACLs);
       updateStats();
       updateLastUpdated('acl-last-updated');
-      $('#acl-loading').hide();
     },
     error: function(xhr) {
+      console.error('Failed to load ACLs:', xhr);
       $('#acl-loading').hide();
+      $('#acls-container').show();
+      allACLs = [];
+      aclsLoaded = true;
       $('#acls-container').html(`
         <div class="message message-error">
           Failed to load ACLs: ${xhr.responseJSON?.error || 'Unknown error'}
         </div>
       `);
+      updateStats();
     }
   });
 }
@@ -129,75 +159,84 @@ function renderACLs(acls) {
   const container = $('#acls-container');
   container.empty();
   
-  if (!acls || acls.length === 0) {
+  console.log('Rendering ACLs:', acls, 'Length:', acls ? acls.length : 'null');
+  
+  if (!Array.isArray(acls) || acls.length === 0) {
+    console.log('Showing empty state for ACLs');
     container.html(`
-      <div class="message message-info">
-        <i class="fi fi-rr-info"></i>
-        <span>No ACLs found. Click "Add ACL" to create one.</span>
+      <div class="empty-state">
+        <div class="empty-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/>
+            <path d="M9 12h6M12 9v6"/>
+          </svg>
+        </div>
+        <h3>No ACLs Yet</h3>
+        <p>Access Control Lists manage IP-based permissions.</p>
+        <p class="hint">Click the "Add ACL" button above to create your first one.</p>
       </div>
     `);
     return;
   }
   
+  // Add header row
+  container.append(`
+    <div class="acl-header">
+      <div>IP Address</div>
+      <div>Access</div>
+      <div>Allowed Hosts</div>
+      <div>User IDs</div>
+      <div>Expires</div>
+      <div>Actions</div>
+    </div>
+  `);
+  
   acls.forEach(acl => {
     const allowAllTag = acl.allow_all 
-      ? '<span class="tag tag-success">Yes</span>' 
-      : '<span class="tag tag-secondary">No</span>';
+      ? '<span class="tag tag-success">All</span>' 
+      : '<span class="tag tag-secondary">Limited</span>';
     
     const hostsHTML = acl.allowed_hosts && acl.allowed_hosts.length > 0
       ? `<div class="tag-list">${acl.allowed_hosts.map(h => `<span class="tag tag-info">${escapeHtml(h)}</span>`).join('')}</div>`
-      : '<span class="tag tag-secondary">None</span>';
+      : '<span class="tag tag-secondary">—</span>';
     
+    // Create user tags with tooltips showing description
     const userIdsHTML = acl.user_ids && acl.user_ids.length > 0
-      ? `<div class="tag-list">${acl.user_ids.map(u => `<span class="tag tag-warning">${escapeHtml(u)}</span>`).join('')}</div>`
-      : '<span class="tag tag-secondary">None</span>';
+      ? `<div class="tag-list">${acl.user_ids.map(userId => {
+          // Find user in allUsers to get description
+          const user = allUsers.find(u => u.id === userId);
+          const description = user && user.description ? escapeHtml(user.description) : 'No description';
+          
+          return `<span class="tag tag-warning user-tag-with-tooltip" data-user-id="${escapeHtml(userId)}">
+            ${escapeHtml(userId)}
+            <span class="user-tag-tooltip">${description}</span>
+          </span>`;
+        }).join('')}</div>`
+      : '<span class="tag tag-secondary">—</span>';
     
     const ttlHTML = acl.ttl 
-      ? `<span class="tag tag-info">${formatDate(new Date(acl.ttl))}</span>`
-      : '<span class="tag tag-secondary">Never</span>';
+      ? formatTTL(acl.ttl)
+      : '<span class="tag tag-secondary">∞</span>';
     
-    const card = $(`
-      <div class="item-card">
-        <div class="item-header">
-          <div class="item-title">
-            <div class="item-name">${escapeHtml(acl.ip_address)}</div>
-            <div class="item-subtitle">IP Access Control</div>
-          </div>
-        </div>
-        
-        <div class="item-details">
-          <div class="item-detail">
-            <div class="detail-label">Allow All</div>
-            <div class="detail-value">${allowAllTag}</div>
-          </div>
-          <div class="item-detail">
-            <div class="detail-label">Allowed Hosts</div>
-            <div class="detail-value">${hostsHTML}</div>
-          </div>
-          <div class="item-detail">
-            <div class="detail-label">User IDs</div>
-            <div class="detail-value">${userIdsHTML}</div>
-          </div>
-          <div class="item-detail">
-            <div class="detail-label">TTL Expiration</div>
-            <div class="detail-value">${ttlHTML}</div>
-          </div>
-        </div>
-        
-        <div class="item-actions">
+    const row = $(`
+      <div class="acl-row">
+        <div class="acl-ip">${escapeHtml(acl.ip_address)}</div>
+        <div class="acl-access">${allowAllTag}</div>
+        <div class="acl-hosts">${hostsHTML}</div>
+        <div class="acl-users">${userIdsHTML}</div>
+        <div class="acl-ttl">${ttlHTML}</div>
+        <div class="acl-actions">
           <button class="btn btn-primary edit-acl-btn" data-ip="${acl.ip_address}">
             <i class="fi fi-rr-edit"></i>
-            <span>Edit</span>
           </button>
           <button class="btn btn-danger delete-acl-btn" data-ip="${acl.ip_address}">
             <i class="fi fi-rr-trash"></i>
-            <span>Delete</span>
           </button>
         </div>
       </div>
     `);
     
-    container.append(card);
+    container.append(row);
   });
   
   // Bind edit buttons
@@ -285,7 +324,7 @@ function saveACL() {
     success: function() {
       showNotification(`ACL ${isEdit ? 'updated' : 'created'} successfully`, 'success');
       closeACLModal();
-      loadACLs();
+      refreshAll();
     },
     error: function(xhr) {
       showNotification(`Failed to ${isEdit ? 'update' : 'create'} ACL: ${xhr.responseJSON?.error || 'Unknown error'}`, 'error');
@@ -318,7 +357,7 @@ function deleteACL(ip) {
     headers: { 'Admin-Secret': adminSecret },
     success: function() {
       showNotification('ACL deleted successfully', 'success');
-      loadACLs();
+      refreshAll();
     },
     error: function(xhr) {
       showNotification(`Failed to delete ACL: ${xhr.responseJSON?.error || 'Unknown error'}`, 'error');
@@ -332,26 +371,35 @@ function deleteACL(ip) {
 
 function loadUsers() {
   $('#user-loading').show();
-  $('#users-container').empty();
+  $('#users-container').hide().empty();
+  usersLoaded = false;
   
   $.ajax({
     type: 'GET',
     url: `${API_BASE}/user`,
     headers: { 'Admin-Secret': adminSecret },
     success: function(data) {
-      allUsers = data || [];
+      console.log('Users loaded:', data);
+      $('#user-loading').hide();
+      $('#users-container').show();
+      allUsers = Array.isArray(data) ? data : [];
+      usersLoaded = true;
       renderUsers(allUsers);
       updateStats();
       updateLastUpdated('user-last-updated');
-      $('#user-loading').hide();
     },
     error: function(xhr) {
+      console.error('Failed to load Users:', xhr);
       $('#user-loading').hide();
+      $('#users-container').show();
+      allUsers = [];
+      usersLoaded = true;
       $('#users-container').html(`
         <div class="message message-error">
           Failed to load users: ${xhr.responseJSON?.error || 'Unknown error'}
         </div>
       `);
+      updateStats();
     }
   });
 }
@@ -360,11 +408,23 @@ function renderUsers(users) {
   const container = $('#users-container');
   container.empty();
   
-  if (!users || users.length === 0) {
+  console.log('Rendering Users:', users, 'Length:', users ? users.length : 'null');
+  
+  if (!Array.isArray(users) || users.length === 0) {
+    console.log('Showing empty state for Users');
     container.html(`
-      <div class="message message-info">
-        <i class="fi fi-rr-info"></i>
-        <span>No users found. Click "Add User" to create one.</span>
+      <div class="empty-state">
+        <div class="empty-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+            <circle cx="12" cy="7" r="4"/>
+            <line x1="12" y1="11" x2="12" y2="14"/>
+            <line x1="10.5" y1="12.5" x2="13.5" y2="12.5"/>
+          </svg>
+        </div>
+        <h3>No Users Yet</h3>
+        <p>Users can authenticate to gain access.</p>
+        <p class="hint">Click the "Add User" button above to create your first one.</p>
       </div>
     `);
     return;
@@ -387,6 +447,15 @@ function renderUsers(users) {
       ? `<div class="tag-list">${user.dns_names.map(d => `<span class="tag tag-warning">${escapeHtml(d)}</span>`).join('')}</div>`
       : '<span class="tag tag-secondary">None</span>';
     
+    // Find IPs from ACLs that have this user
+    const userIPs = allACLs
+      .filter(acl => acl.user_ids && acl.user_ids.includes(user.id))
+      .map(acl => acl.ip_address);
+    
+    const ipsHTML = userIPs.length > 0
+      ? `<div class="tag-list">${userIPs.map(ip => `<span class="tag tag-primary">${escapeHtml(ip)}</span>`).join('')}</div>`
+      : '<span class="tag tag-secondary">No active IPs</span>';
+    
     const card = $(`
       <div class="item-card">
         <div class="item-header">
@@ -398,6 +467,10 @@ function renderUsers(users) {
         </div>
         
         <div class="item-details">
+          <div class="item-detail">
+            <div class="detail-label">Active IP Addresses</div>
+            <div class="detail-value">${ipsHTML}</div>
+          </div>
           <div class="item-detail">
             <div class="detail-label">ACL Allow All</div>
             <div class="detail-value">${allowAllTag}</div>
@@ -529,7 +602,7 @@ function saveUser() {
     success: function() {
       showNotification(`User ${isEdit ? 'updated' : 'created'} successfully`, 'success');
       closeUserModal();
-      loadUsers();
+      refreshAll();
     },
     error: function(xhr) {
       showNotification(`Failed to ${isEdit ? 'update' : 'create'} user: ${xhr.responseJSON?.error || 'Unknown error'}`, 'error');
@@ -562,7 +635,7 @@ function deleteUser(id) {
     headers: { 'Admin-Secret': adminSecret },
     success: function() {
       showNotification('User deleted successfully', 'success');
-      loadUsers();
+      refreshAll();
     },
     error: function(xhr) {
       showNotification(`Failed to delete user: ${xhr.responseJSON?.error || 'Unknown error'}`, 'error');
@@ -584,6 +657,46 @@ function formatDate(date) {
   });
 }
 
+function formatDateShort(date) {
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric'
+  });
+}
+
+function formatTTL(ttlDate) {
+  const now = new Date();
+  const expiry = new Date(ttlDate);
+  const diffMs = expiry - now;
+  
+  // If expired
+  if (diffMs < 0) {
+    return '<span class="tag tag-danger">Expired</span>';
+  }
+  
+  // Convert to hours
+  const hours = Math.floor(diffMs / (1000 * 60 * 60));
+  const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+  
+  // Less than 24 hours - show human readable
+  if (hours < 24) {
+    if (hours === 0) {
+      if (minutes === 0) {
+        return '<span class="tag tag-danger">< 1 min</span>';
+      }
+      return `<span class="tag tag-warning">${minutes} min${minutes !== 1 ? 's' : ''}</span>`;
+    }
+    if (minutes > 0) {
+      return `<span class="tag tag-warning">${hours}h ${minutes}m</span>`;
+    }
+    return `<span class="tag tag-warning">${hours} hour${hours !== 1 ? 's' : ''}</span>`;
+  }
+  
+  // More than 24 hours - show short date
+  return `<span class="tag tag-info">${formatDateShort(expiry)}</span>`;
+}
+
 function updateLastUpdated(elementId) {
   const now = new Date();
   $(`#${elementId}`).text(`Last updated: ${formatDate(now)}`);
@@ -596,10 +709,32 @@ function escapeHtml(text) {
 }
 
 // ============================================================================
+// Version Info
+// ============================================================================
+
+function loadVersion() {
+  $.ajax({
+    type: 'GET',
+    url: `${API_BASE}/version`,
+    success: function(data) {
+      if (data && data.version) {
+        $('#version-info').text(`Version ${data.version} (${data.build_ref || 'dev'})`);
+      }
+    },
+    error: function() {
+      $('#version-info').text('Version info unavailable');
+    }
+  });
+}
+
+// ============================================================================
 // Initialization
 // ============================================================================
 
 $(document).ready(function() {
+  // Load version info
+  loadVersion();
+  
   // Auth section
   $('#auth-button').on('click', authenticate);
   $('#admin-secret').on('keyup', function(e) {
@@ -613,18 +748,40 @@ $(document).ready(function() {
   
   // ACL buttons
   $('#add-acl-btn').on('click', () => openACLModal(false));
-  $('#refresh-acls-btn').on('click', loadACLs);
+  $('#refresh-acls-btn').on('click', refreshAll);
   $('#save-acl-btn').on('click', saveACL);
   
   // User buttons
   $('#add-user-btn').on('click', () => openUserModal(false));
-  $('#refresh-users-btn').on('click', loadUsers);
+  $('#refresh-users-btn').on('click', refreshAll);
   $('#save-user-btn').on('click', saveUser);
   
   // Close modal on background click
   $('.modal').on('click', function(e) {
     if (e.target === this) {
       $(this).hide();
+    }
+  });
+  
+  // User tag tooltip handlers (event delegation for dynamic content)
+  $(document).on('click', '.user-tag-with-tooltip', function(e) {
+    e.stopPropagation();
+    console.log('User tag clicked!');
+    const tooltip = $(this).find('.user-tag-tooltip');
+    console.log('Tooltip element:', tooltip, 'Has show class:', tooltip.hasClass('show'));
+    
+    // Hide all other tooltips
+    $('.user-tag-tooltip').not(tooltip).removeClass('show');
+    
+    // Toggle this tooltip
+    tooltip.toggleClass('show');
+    console.log('After toggle, has show class:', tooltip.hasClass('show'));
+  });
+  
+  // Hide tooltips when clicking outside
+  $(document).on('click', function(e) {
+    if (!$(e.target).closest('.user-tag-with-tooltip').length) {
+      $('.user-tag-tooltip').removeClass('show');
     }
   });
 });
