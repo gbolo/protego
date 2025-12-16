@@ -5,13 +5,12 @@ import (
 
 	"github.com/gbolo/protego/config"
 	"github.com/gbolo/protego/dataprovider"
+	_ "github.com/gbolo/protego/docs"
 	"github.com/gbolo/protego/server"
 	"github.com/spf13/viper"
-	_ "github.com/gbolo/protego/docs"
 )
 
 var log = config.GetLogger()
-
 
 func main() {
 	// init the config

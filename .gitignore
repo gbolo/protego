@@ -2,3 +2,4 @@
 bin/*
 testdata/db/*.db
 protego
+.task

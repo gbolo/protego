@@ -11,4 +11,3 @@ import (
 
 // Assets contains project assets.
 var Assets http.FileSystem = embedded.HTTPFileSystem()
-

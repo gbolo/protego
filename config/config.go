@@ -1,12 +1,13 @@
 package config
 
 import (
-	"github.com/spf13/viper"
 	"strings"
+
+	"github.com/spf13/viper"
 )
 
 const (
-	AppName         = "protego"
+	AppName = "protego"
 )
 
 var (

@@ -689,7 +689,7 @@ func handlerACLDelete(w http.ResponseWriter, req *http.Request) {
 }
 
 // wrapper for json responses
-func writeJSONResponse(w http.ResponseWriter, status int, body interface{}) {
+func writeJSONResponse(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	b, _ := json.MarshalIndent(body, "", "  ")

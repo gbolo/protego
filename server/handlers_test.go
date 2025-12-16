@@ -42,7 +42,7 @@ func setupTestAPI(t *testing.T) {
 }
 
 // small helper to decode JSON into a target struct and fail on error
-func decodeJSON(t *testing.T, body *bytes.Buffer, out interface{}) {
+func decodeJSON(t *testing.T, body *bytes.Buffer, out any) {
 	t.Helper()
 	if err := json.Unmarshal(body.Bytes(), out); err != nil {
 		t.Fatalf("json.Unmarshal: %v (body=%q)", err, body.String())

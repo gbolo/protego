@@ -2,12 +2,13 @@ package dataprovider
 
 import (
 	"fmt"
-	"github.com/spf13/viper"
 	"os"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/spf13/viper"
 )
 
 // ---------- shared providers per implementation ----------

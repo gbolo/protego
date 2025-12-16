@@ -1,3 +1,4 @@
+//go:build go1.8
 // +build go1.8
 
 // enforce go 1.8+ just so we can support X25519 curve :)

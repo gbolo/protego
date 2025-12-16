@@ -18,4 +18,3 @@ func HTTPFileSystem() http.FileSystem {
 func Sub(dir string) (fs.FS, error) {
 	return fs.Sub(FS, dir)
 }
-
