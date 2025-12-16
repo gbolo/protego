@@ -12,13 +12,23 @@
 <body>
     <div class="container">
         <header>
-            <div class="header-icon">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/>
-                </svg>
+            <div class="header-content">
+                <div class="header-left">
+                    <div class="header-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/>
+                        </svg>
+                    </div>
+                    <div class="header-text">
+                        <h1>Protego Administration</h1>
+                        <p class="subtitle">Manage ACLs and Users</p>
+                    </div>
+                </div>
+                <button class="btn btn-secondary logout-btn" id="logout-btn" style="display: none;" onclick="logout()">
+                    <i class="fi fi-rr-exit"></i>
+                    <span>Logout</span>
+                </button>
             </div>
-            <h1>Protego Administration</h1>
-            <p class="subtitle">Manage ACLs and Users</p>
         </header>
 
         <!-- Authentication Section -->

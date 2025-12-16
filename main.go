@@ -35,8 +35,8 @@ func main() {
 		log.Fatalf("failed to init data provider: %v", err)
 	}
 
-	// init the server
-	err = server.InitServer(p)
+	// init the fiber server
+	err = server.InitFiberServer(p)
 	if err != nil {
 		log.Fatalf("failed to start server: %v", err)
 	}

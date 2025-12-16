@@ -29,8 +29,12 @@ function authenticate() {
     url: `${API_BASE}/user`,
     headers: { 'Admin-Secret': adminSecret },
     success: function() {
+      // Save to localStorage on successful authentication
+      localStorage.setItem('protego-admin-secret', adminSecret);
+      
       $('#auth-section').hide();
       $('#dashboard-section').show();
+      $('#logout-btn').show();
       
       // Initialize stats with zeros
       updateStats();
@@ -42,8 +46,57 @@ function authenticate() {
     error: function() {
       showAuthError('Authentication failed. Please check your admin secret.');
       adminSecret = '';
+      // Clear from localStorage on failed auth
+      localStorage.removeItem('protego-admin-secret');
     }
   });
+}
+
+function tryAutoAuthenticate() {
+  // Check if we have a saved admin secret
+  const savedSecret = localStorage.getItem('protego-admin-secret');
+  if (savedSecret) {
+    adminSecret = savedSecret;
+    
+    // Test if the saved secret is still valid
+    $.ajax({
+      type: 'GET',
+      url: `${API_BASE}/user`,
+      headers: { 'Admin-Secret': adminSecret },
+      success: function() {
+        // Secret is valid, show dashboard
+        $('#auth-section').hide();
+        $('#dashboard-section').show();
+        $('#logout-btn').show();
+        
+        // Initialize stats with zeros
+        updateStats();
+        
+        // Load data
+        loadACLs();
+        loadUsers();
+      },
+      error: function() {
+        // Secret is invalid, clear it and show login
+        adminSecret = '';
+        localStorage.removeItem('protego-admin-secret');
+        $('#auth-section').show();
+        $('#dashboard-section').hide();
+        $('#logout-btn').hide();
+      }
+    });
+  }
+}
+
+function logout() {
+  if (confirm('Are you sure you want to logout?')) {
+    adminSecret = '';
+    localStorage.removeItem('protego-admin-secret');
+    $('#auth-section').show();
+    $('#dashboard-section').hide();
+    $('#logout-btn').hide();
+    $('#admin-secret').val('');
+  }
 }
 
 function showAuthError(message) {
@@ -236,25 +289,18 @@ function renderACLs(acls) {
       ? formatTTL(acl.ttl)
       : '<span class="tag tag-secondary">∞ Never</span>';
     
-    // Determine risk level for allow_all ACLs
+    // Determine risk level based on allow_all and TTL
     let riskClass = '';
-    if (acl.allow_all) {
-      if (!acl.ttl) {
-        // No expiration - highest risk
-        riskClass = 'risk-high';
-      } else {
-        const now = new Date();
-        const expiry = new Date(acl.ttl);
-        const daysUntilExpiry = (expiry - now) / (1000 * 60 * 60 * 24);
-        
-        if (daysUntilExpiry > 30) {
-          // More than 30 days - high risk
-          riskClass = 'risk-high';
-        } else if (daysUntilExpiry > 0) {
-          // Less than 30 days but not expired - medium risk
-          riskClass = 'risk-medium';
-        }
-      }
+    const hasAllowAll = acl.allow_all;
+    const hasNoExpiration = !acl.ttl;
+    
+    // High risk: BOTH allow_all AND no expiration
+    if (hasAllowAll && hasNoExpiration) {
+      riskClass = 'risk-high';
+    }
+    // Medium risk: EITHER allow_all OR no expiration (but not both)
+    else if (hasAllowAll || hasNoExpiration) {
+      riskClass = 'risk-medium';
     }
     
     const row = $(`
@@ -888,6 +934,9 @@ function loadVersion() {
 $(document).ready(function() {
   // Load version info
   loadVersion();
+  
+  // Try to auto-authenticate with saved secret
+  tryAutoAuthenticate();
   
   // Auth section
   $('#auth-button').on('click', authenticate);
