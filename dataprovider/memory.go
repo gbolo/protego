@@ -108,7 +108,7 @@ func (p *MemoryProvider) UpdateACL(ip string, acl *ACL) error {
 
 func (p *MemoryProvider) AddUser(u *User) error {
 	// validate the user object
-	if u == nil || len(u.ID) < 6 {
+	if u == nil || u.ID == "" {
 		return fmt.Errorf("validation error for User: %v", u)
 	}
 	// check if user already exists
@@ -125,7 +125,7 @@ func (p *MemoryProvider) AddUser(u *User) error {
 
 func (p *MemoryProvider) RemoveUser(u *User) error {
 	// validate the user object
-	if u == nil || len(u.ID) < 6 {
+	if u == nil || u.ID == "" {
 		return fmt.Errorf("validation error for User: %v", u)
 	}
 	// remove the user
@@ -137,7 +137,7 @@ func (p *MemoryProvider) RemoveUser(u *User) error {
 
 func (p *MemoryProvider) GetUser(id string) (user *User, err error) {
 	// validate the user id
-	if len(id) < 6 {
+	if id == "" {
 		return nil, fmt.Errorf("user id is invalid: %s", id)
 	}
 	// retrieve the user

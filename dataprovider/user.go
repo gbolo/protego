@@ -20,7 +20,7 @@ var (
 )
 
 // User represents a user/client which is registered by the admin.
-// a User is identified by a secret (which is hashed into an ID).
+// a User is identified by an admin-defined ID and authenticates with a secret.
 // a User can have multiple IPs associated with it.
 // when a User has one or more DNSNames, all of them get placed in the
 // IP database with unlimited TTL. A backend process will clean out old IPs when
@@ -30,8 +30,8 @@ type User struct {
 	Enabled bool `json:"enabled" example:"true"`
 	// A brief description of this User
 	Description string `json:"description" example:"Cloud Strife"`
-	// A unique identifier for this User
-	ID string `json:"id" example:"5e8848"`
+	// A unique identifier for this User (admin-defined, 4-64 characters)
+	ID string `json:"id" example:"cloud" valid:"stringlength(4|64)"`
 	// This secret is used as a challenge to whitelist a User's IP
 	Secret string `json:"secret,omitempty" example:"supersecret"`
 	// Determines if this User is allowed to access ALL resources
@@ -47,19 +47,23 @@ type User struct {
 }
 
 // NewUser returns a User with safe defaults
-func NewUser(secret, description string) (u *User, err error) {
+func NewUser(userID, secret, description string) (u *User, err error) {
+	// Validate secret length
 	if len(secret) < minSecretLength {
 		return nil, ErrSecretLength
 	}
+
+	// Hash the secret
 	secretHash, err := hashSecret(secret)
 	if err != nil {
 		return nil, err
 	}
+
 	u = &User{
-		// Enabled is not used for... just set to true
+		// Enabled is set to true by default
 		Enabled:         true,
 		Description:     description,
-		ID:              generateIdFromSecret(secret),
+		ID:              userID,
 		Secret:          secretHash,
 		ACLAllowAll:     false,
 		ACLAllowedHosts: nil,
@@ -75,19 +79,21 @@ func DecodeUser(data []byte) (u *User, err error) {
 	if err = json.Unmarshal(data, &tempUser); err != nil {
 		return
 	}
-	// check if the secret is valid
-	u, err = NewUser(tempUser.Secret, tempUser.Description)
-	if err != nil {
-		u = nil
-		return
+
+	// Note: Secret in tempUser is already hashed when stored/retrieved from DB
+	// No validation needed here - validation should happen at the API layer
+
+	u = &User{
+		Enabled:         tempUser.Enabled,
+		Description:     tempUser.Description,
+		ID:              tempUser.ID,
+		Secret:          tempUser.Secret, // Already hashed
+		ACLAllowAll:     tempUser.ACLAllowAll,
+		ACLAllowedHosts: tempUser.ACLAllowedHosts,
+		DNSNames:        tempUser.DNSNames,
+		TTLMinutes:      tempUser.TTLMinutes,
+		IPs:             tempUser.IPs,
 	}
-	// provided user looks valid, construct the allowed fields now
-	// TODO: do some validation here, since this data is untrusted
-	u.ACLAllowAll = tempUser.ACLAllowAll
-	u.ACLAllowedHosts = tempUser.ACLAllowedHosts
-	u.TTLMinutes = tempUser.TTLMinutes
-	u.DNSNames = tempUser.DNSNames
-	u.Enabled = tempUser.Enabled
 	return
 }
 

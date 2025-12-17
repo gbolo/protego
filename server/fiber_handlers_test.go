@@ -82,8 +82,9 @@ func TestFiberHandlerUserCRUD(t *testing.T) {
 	app := setupTestFiberApp(t) //nolint:bodyclose // False positive: setupTestFiberApp doesn't return response
 
 	// Test data
-	var userId string // Will be set from response
+	userId := "testuser" // Use a defined user ID
 	createReqBody := addUser{
+		ID:              userId,
 		Enabled:         true,
 		Description:     "Test User",
 		Secret:          "supersecret",
@@ -109,8 +110,7 @@ func TestFiberHandlerUserCRUD(t *testing.T) {
 		var user getUser
 		err = json.Unmarshal(body, &user)
 		require.NoError(t, err)
-		assert.NotEmpty(t, user.ID)
-		userId = user.ID // Store for subsequent tests
+		assert.Equal(t, userId, user.ID)
 		assert.Equal(t, "Test User", user.Description)
 		assert.True(t, user.Enabled)
 	})
@@ -214,7 +214,7 @@ func TestFiberHandlerUserUnauthorized(t *testing.T) {
 			description: "add user without admin secret",
 			route:       "/api/v1/user",
 			method:      "POST",
-			body:        addUser{Secret: "secret"},
+			body:        addUser{ID: "test", Secret: "secret"},
 		},
 		{
 			description: "get user without admin secret",
@@ -465,6 +465,8 @@ func TestFiberHandlerChallenge_MergeACLsForSameIP(t *testing.T) {
 	app := setupTestFiberApp(t) //nolint:bodyclose // False positive: setupTestFiberApp doesn't return response
 
 	const (
+		userId1     = "user1"
+		userId2     = "user2"
 		userSecret1 = "secret-user-1"
 		userSecret2 = "secret-user-2"
 		clientIP    = "203.0.113.20"
@@ -475,6 +477,7 @@ func TestFiberHandlerChallenge_MergeACLsForSameIP(t *testing.T) {
 	// --- Create first user with shorter TTL ---
 	t.Run("Create first user", func(t *testing.T) {
 		reqBody1 := addUser{
+			ID:              userId1,
 			Enabled:         true,
 			Description:     "First User",
 			Secret:          userSecret1,
@@ -491,6 +494,11 @@ func TestFiberHandlerChallenge_MergeACLsForSameIP(t *testing.T) {
 		res, err := app.Test(req, -1)
 		require.NoError(t, err)
 		defer res.Body.Close()
+
+		if res.StatusCode != 201 {
+			body, _ := io.ReadAll(res.Body)
+			t.Logf("Error creating user: %s", string(body))
+		}
 		assert.Equal(t, 201, res.StatusCode)
 	})
 
@@ -499,6 +507,7 @@ func TestFiberHandlerChallenge_MergeACLsForSameIP(t *testing.T) {
 	t.Run("First challenge creates ACL for user1", func(t *testing.T) {
 		req, _ := http.NewRequestWithContext(t.Context(), "POST", "/api/v1/challenge", http.NoBody)
 		req.Header.Set("X-Real-IP", clientIP)
+		req.Header.Set("User-ID", userId1)
 		req.Header.Set("User-Secret", userSecret1)
 
 		res, err := app.Test(req, -1)
@@ -520,6 +529,7 @@ func TestFiberHandlerChallenge_MergeACLsForSameIP(t *testing.T) {
 	// --- Create second user with longer TTL and AllowAll=true ---
 	t.Run("Create second user", func(t *testing.T) {
 		reqBody2 := addUser{
+			ID:              userId2,
 			Enabled:         true,
 			Description:     "Second User",
 			Secret:          userSecret2,
@@ -543,6 +553,7 @@ func TestFiberHandlerChallenge_MergeACLsForSameIP(t *testing.T) {
 	t.Run("Second challenge merges ACLs", func(t *testing.T) {
 		req, _ := http.NewRequestWithContext(t.Context(), "POST", "/api/v1/challenge", http.NoBody)
 		req.Header.Set("X-Real-IP", clientIP)
+		req.Header.Set("User-ID", userId2)
 		req.Header.Set("User-Secret", userSecret2)
 
 		res, err := app.Test(req, -1)

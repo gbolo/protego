@@ -1,9 +1,6 @@
 package dataprovider
 
 import (
-	"crypto/sha256"
-	"fmt"
-
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -13,15 +10,8 @@ func hashSecret(secret string) (bcryptHash string, err error) {
 	return string(bytes), err
 }
 
-// generateIdFromSecret will generate a small ID (6 chars) based on the secret.
-// this is NOT used to prove the client has the correct passphrase,
-// it is only used to identify the client, otherwise the we would need to provide
-// a client both a passphrase and a user (two things to remember instead of one).
-// This also means that two clients cannot have the same passphrase. However, since
-// only the admin can create new clients, then only the admin would be aware of this.
-// we cannot use bcrypt here because value would change every time we hash it,
-// instead we return the first 6 chars from a SHA256 sum of the secret.
-func generateIdFromSecret(secret string) (id string) {
-	sum := fmt.Sprintf("%x", sha256.Sum256([]byte(secret)))
-	return sum[0:6]
+// VerifySecret compares a plain text secret against a bcrypt hash.
+// Returns nil if the secret matches, or an error if it doesn't.
+func VerifySecret(hashedSecret, plainSecret string) error {
+	return bcrypt.CompareHashAndPassword([]byte(hashedSecret), []byte(plainSecret))
 }

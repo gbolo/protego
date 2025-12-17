@@ -1,155 +1,572 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Protego</title>
-    <link rel="icon" type="image/png" href="/assets/favicon.png" />
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.8.0/css/bulma.min.css">
-    <script defer src="https://use.fontawesome.com/releases/v5.3.1/js/all.js"></script>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Protego - Whitelist Your IP</title>
+    <link rel='stylesheet' href='https://cdn-uicons.flaticon.com/2.6.0/uicons-regular-rounded/css/uicons-regular-rounded.css'>
+    <link rel='stylesheet' href='https://cdn-uicons.flaticon.com/2.6.0/uicons-bold-rounded/css/uicons-bold-rounded.css'>
+    <link rel="icon" type="image/png" href="/assets/favicon.png">
     <style>
-    .pad-right {
-      padding-right: 10px;
-    }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary-color: #6366f1;
+            --secondary-color: #8b5cf6;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --danger-color: #ef4444;
+            --bg-color: #0f172a;
+            --surface-color: #1e293b;
+            --text-color: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border-color: #334155;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: var(--text-color);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            width: 100%;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            margin-bottom: 40px;
+            padding: 32px 20px;
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(99, 102, 241, 0.3);
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .header-icon {
+            flex-shrink: 0;
+        }
+
+        .header-icon svg {
+            width: 52px;
+            height: 52px;
+            filter: drop-shadow(0 2px 10px rgba(0, 0, 0, 0.3));
+        }
+
+        .header-text {
+            text-align: left;
+        }
+
+        header h1 {
+            font-size: 2em;
+            margin-bottom: 8px;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+        }
+
+        .subtitle {
+            font-size: 1.1em;
+            opacity: 0.95;
+        }
+
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 0;
+        }
+
+        .challenge-card {
+            max-width: 600px;
+            width: 100%;
+            background: var(--surface-color);
+            padding: 50px;
+            border-radius: 16px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .challenge-title {
+            text-align: center;
+            margin-bottom: 35px;
+        }
+
+        .challenge-title h2 {
+            font-size: 2em;
+            color: var(--text-color);
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+        }
+
+        .challenge-title h2 i {
+            color: var(--primary-color);
+            font-size: 1.2em;
+        }
+
+        .challenge-title p {
+            color: var(--text-secondary);
+            font-size: 1.05em;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 0.95em;
+            font-weight: 600;
+            color: var(--text-color);
+            margin-bottom: 8px;
+        }
+
+        .form-group input[type="text"],
+        .form-group input[type="password"] {
+            width: 100%;
+            padding: 16px 20px;
+            background: var(--bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-color);
+            font-size: 1.1em;
+            font-family: inherit;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .form-group input[type="text"]:focus,
+        .form-group input[type="password"]:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+
+        .form-group input[type="text"]::placeholder,
+        .form-group input[type="password"]::placeholder {
+            color: var(--text-secondary);
+            opacity: 0.6;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 16px 24px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1.1em;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            font-weight: 600;
+        }
+
+        .btn i {
+            font-size: 18px;
+        }
+
+        .btn-primary {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: var(--secondary-color);
+            transform: scale(1.02);
+            box-shadow: 0 5px 20px rgba(99, 102, 241, 0.4);
+        }
+
+        .btn-primary:active:not(:disabled) {
+            transform: scale(0.98);
+        }
+
+        .btn-success {
+            background: var(--success-color);
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #059669;
+        }
+
+        .btn-danger {
+            background: var(--danger-color);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+
+        .btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+
+        .message {
+            padding: 18px 22px;
+            border-radius: 8px;
+            margin-top: 25px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 1em;
+            display: none;
+        }
+
+        .message i {
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+
+        .message-success {
+            background: rgba(16, 185, 129, 0.2);
+            color: var(--success-color);
+            border: 1px solid var(--success-color);
+        }
+
+        .message-error {
+            background: rgba(239, 68, 68, 0.2);
+            color: var(--danger-color);
+            border: 1px solid var(--danger-color);
+        }
+
+        .message-info {
+            background: rgba(99, 102, 241, 0.2);
+            color: var(--primary-color);
+            border: 1px solid var(--primary-color);
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 40px 20px 30px;
+            color: var(--text-secondary);
+            font-size: 0.9em;
+            border-top: 1px solid var(--border-color);
+            margin-top: 40px;
+        }
+
+        footer p {
+            margin: 8px 0;
+        }
+
+        footer .version {
+            font-size: 0.85em;
+            color: var(--text-secondary);
+            opacity: 0.8;
+            font-family: 'Monaco', 'Courier New', monospace;
+        }
+
+        footer .footer-links {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 12px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+
+        footer .separator {
+            color: var(--border-color);
+            font-size: 0.8em;
+        }
+
+        footer a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border-radius: 6px;
+        }
+
+        footer a:hover {
+            color: var(--primary-color);
+            background: rgba(99, 102, 241, 0.1);
+        }
+
+        footer a i,
+        footer a svg {
+            transition: transform 0.2s ease;
+            font-size: 14px;
+            width: 14px;
+            height: 14px;
+        }
+
+        footer a:hover i,
+        footer a:hover svg {
+            transform: scale(1.15);
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .header-content {
+                flex-direction: column;
+                text-align: center;
+            }
+            
+            .header-left {
+                flex-direction: column;
+                text-align: center;
+            }
+            
+            .header-text {
+                text-align: center;
+            }
+            
+            header h1 {
+                font-size: 1.8em;
+            }
+
+            .challenge-card {
+                padding: 35px 25px;
+            }
+
+            .challenge-title h2 {
+                font-size: 1.6em;
+            }
+        }
     </style>
-  </head>
-  <body>
-
-
-  <section class="hero is-dark is-fullheight">
-    <header class="header">
-      <nav class="navbar">
-        <div class="container">
-          <div class="navbar-brand">
-            <a class="navbar-item has-text-white is-size-4 has-text-weight-bold" href="/">
-                <img src="/assets/protego-logo.png" class="pad-right">Protego<img>
-            </a>
-            <span role="button" tabindex="0" class="navbar-burger burger has-text-white" data-target="navbar-menu">
-              <span></span>
-              <span></span>
-              <span></span>
-            </span>
-          </div>
-          <div id="navbar-menu" class="navbar-menu">
-            <div class="navbar-end">
-                <span class="navbar-item">
-                    <a class="button is-white is-outlined" href="https://github.com/gbolo/protego">
-                        <span class="icon">
-                            <i class="fa fa-book"></i>
-                        </span>
-                        <span>Docs</span>
-                    </a>
-                </span>
-                <span class="navbar-item">
-                    <a class="button is-white is-outlined" href="/swagger">
-                        <span class="icon">
-                            <i class="fas fa-laptop-code"></i>
-                        </span>
-                        <span>Swagger</span>
-                    </a>
-                </span>
-                <span class="navbar-item">
-                    <a class="button is-white is-outlined" href="/admin">
-                        <span class="icon">
-                            <i class="fas fa-user-shield"></i>
-                        </span>
-                        <span>Admin</span>
-                    </a>
-                </span>
-                <span class="navbar-item">
-                    <a class="button is-white is-outlined" href="https://github.com/gbolo/protego">
-                        <span class="icon">
-                            <i class="fab fa-github"></i>
-                        </span>
-                        <span>View Source</span>
-                    </a>
-                </span>
-            </div>
-        </div>
-      </nav>
-    </header>
-
-    <div class="hero-body">
-        <div class="container has-text-centered">
-            <div class="column">
-              <div class="container has-text-centered">
-                <h1 class="title" id="title">
-                  Whitelist Your IP
-                </h1>
-                <div class="box">
-                    <div class="field is-grouped">
-                        <p class="control is-expanded">
-                            <input class="input" type="password" id="secret" placeholder="Enter your secret">
-                        </p>
-                        <p class="control">
-                            <a class="button is-dark" id="submitSecret">
-                                Submit
-                            </a>
-                        </p>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-content">
+                <div class="header-left">
+                    <div class="header-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/>
+                        </svg>
+                    </div>
+                    <div class="header-text">
+                        <h1>Protego</h1>
+                        <p class="subtitle">IP Whitelisting System</p>
                     </div>
                 </div>
-                <!-- <p class="subtitle">
-                  current status: unknown
-                </p> -->
-              </div>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <div class="challenge-card">
+                <div class="challenge-title">
+                    <h2>
+                        <i class="fi fi-rr-shield-check"></i>
+                        <span id="title">Whitelist Your IP</span>
+                    </h2>
+                    <p>Enter your credentials to gain access</p>
+                </div>
+
+                <form id="challenge-form">
+                    <div class="form-group">
+                        <label for="userId">User ID</label>
+                        <input type="text" id="userId" placeholder="Enter your user ID" autocomplete="username">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="secret">Secret</label>
+                        <input type="password" id="secret" placeholder="Enter your secret" autocomplete="current-password">
+                    </div>
+
+                    <button type="submit" class="btn btn-primary" id="submitSecret">
+                        <i class="fi fi-rr-unlock"></i>
+                        <span id="button-text">Submit</span>
+                    </button>
+
+                    <div id="message" class="message"></div>
+                </form>
             </div>
         </div>
     </div>
 
-  </section>
+    <footer>
+        <p>Protego - IP Whitelisting System</p>
+        <p class="version" id="version-info">Loading version...</p>
+        <div class="footer-links">
+            <a href="/admin" rel="noopener noreferrer">
+                <i class="fi fi-rr-user-shield"></i>
+                <span>Admin</span>
+            </a>
+            <span class="separator">•</span>
+            <a href="https://github.com/gbolo/protego" target="_blank" rel="noopener noreferrer">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                </svg>
+                <span>GitHub</span>
+            </a>
+            <span class="separator">•</span>
+            <a href="/swagger" rel="noopener noreferrer">
+                <i class="fi fi-rr-laptop-code"></i>
+                <span>API Docs</span>
+            </a>
+        </div>
+    </footer>
 
-  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
-  <script>
-    var submitLink = $("#submitSecret");
-    var secretInput = $("#secret");
-    var title = $("#title");
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+    <script>
+        const API_BASE = '/api/v1';
 
-    var doChallengeRequest = function() {
-      submitLink.attr("disabled", true);
-      $.ajax({
-          type: "POST",
-          dataType: "json",
-          url: '/api/v1/challenge',
-          headers: {
-            'User-Secret': $("#secret").val()
-          },
-
-          beforeSend: function(){
-              submitLink.text('Sending');
-          },
-          success: function() {
-              submitLink.text('Success');
-              submitLink.removeClass('is-dark is-danger');
-              submitLink.addClass('is-success');
-              title.text('IP has been Whitelisted')
-          },
-          error: function() {
-              submitLink.text('Failed');
-              submitLink.removeClass('is-dark is-success');
-              submitLink.addClass('is-danger');
-              title.text('Incorrect Secret')
-          },
-      });
-    }
-
-    // listen for clicks to submitSecret button
-    submitLink.on("click", doChallengeRequest);
-
-    // listen for changes to input field
-    secretInput.on("keypress", function(){
-        submitLink.attr("disabled", false);
-        submitLink.text('Submit');
-        submitLink.removeClass('is-danger is-success');
-        submitLink.addClass('is-dark');
-    });
-
-    // listen for ENTER keystroke on input field
-    secretInput.on("keyup", function(e){
-        if (e.keyCode === 13) {
-          doChallengeRequest();
+        // Load version info
+        function loadVersion() {
+            $.ajax({
+                type: 'GET',
+                url: `${API_BASE}/version`,
+                success: function(data) {
+                    if (data && data.version) {
+                        $('#version-info').text(`Version ${data.version} (${data.build_ref || 'dev'})`);
+                    }
+                },
+                error: function() {
+                    $('#version-info').text('Version info unavailable');
+                }
+            });
         }
-    });
-  </script>
 
-  </body>
+        function showMessage(text, type) {
+            const message = $('#message');
+            message.removeClass('message-success message-error message-info');
+            message.addClass(`message-${type}`);
+            
+            let icon = 'fi-rr-info';
+            if (type === 'success') {
+                icon = 'fi-rr-check-circle';
+            } else if (type === 'error') {
+                icon = 'fi-rr-cross-circle';
+            }
+            
+            message.html(`<i class="fi ${icon}"></i><span>${text}</span>`);
+            message.show();
+        }
+
+        function hideMessage() {
+            $('#message').hide();
+        }
+
+        function doChallengeRequest() {
+            const submitBtn = $('#submitSecret');
+            const buttonText = $('#button-text');
+            const titleText = $('#title');
+            const userId = $('#userId').val().trim();
+            const secret = $('#secret').val();
+
+            if (!userId) {
+                showMessage('Please enter your user ID', 'error');
+                return;
+            }
+
+            if (!secret) {
+                showMessage('Please enter your secret', 'error');
+                return;
+            }
+
+            submitBtn.prop('disabled', true);
+            buttonText.text('Sending...');
+            hideMessage();
+
+            $.ajax({
+                type: 'POST',
+                dataType: 'json',
+                url: `${API_BASE}/challenge`,
+                headers: {
+                    'User-ID': userId,
+                    'User-Secret': secret
+                },
+                success: function(response) {
+                    buttonText.text('Success!');
+                    submitBtn.removeClass('btn-primary btn-danger').addClass('btn-success');
+                    titleText.text('IP Whitelisted Successfully');
+                    showMessage('Your IP address has been successfully whitelisted!', 'success');
+                    
+                    // Reset form after 3 seconds
+                    setTimeout(function() {
+                        $('#userId').val('');
+                        $('#secret').val('');
+                        buttonText.text('Submit');
+                        submitBtn.removeClass('btn-success').addClass('btn-primary');
+                        submitBtn.prop('disabled', false);
+                        titleText.text('Whitelist Your IP');
+                        hideMessage();
+                    }, 3000);
+                },
+                error: function(xhr) {
+                    buttonText.text('Failed');
+                    submitBtn.removeClass('btn-primary btn-success').addClass('btn-danger');
+                    titleText.text('Authentication Failed');
+                    
+                    const errorMsg = xhr.responseJSON?.error || 'Authentication failed. Please check your credentials and try again.';
+                    showMessage(errorMsg, 'error');
+                    
+                    // Reset button after 2 seconds
+                    setTimeout(function() {
+                        buttonText.text('Submit');
+                        submitBtn.removeClass('btn-danger').addClass('btn-primary');
+                        submitBtn.prop('disabled', false);
+                    }, 2000);
+                }
+            });
+        }
+
+        // Initialize on document ready
+        $(document).ready(function() {
+            loadVersion();
+
+            // Handle form submission
+            $('#challenge-form').on('submit', function(e) {
+                e.preventDefault();
+                doChallengeRequest();
+            });
+
+            // Listen for input changes on both fields
+            $('#userId, #secret').on('input', function() {
+                const submitBtn = $('#submitSecret');
+                const buttonText = $('#button-text');
+                
+                if (!submitBtn.hasClass('btn-primary')) {
+                    buttonText.text('Submit');
+                    submitBtn.removeClass('btn-danger btn-success').addClass('btn-primary');
+                    submitBtn.prop('disabled', false);
+                }
+                hideMessage();
+            });
+
+            // Listen for ENTER keystroke on input fields
+            $('#userId, #secret').on('keyup', function(e) {
+                if (e.keyCode === 13) {
+                    doChallengeRequest();
+                }
+            });
+        });
+    </script>
+</body>
 </html>

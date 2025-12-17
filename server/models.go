@@ -3,6 +3,8 @@ package server
 import "github.com/gbolo/protego/dataprovider"
 
 type addUser struct {
+	// A unique identifier for this User (4-64 characters)
+	ID string `json:"id" example:"cloud" valid:"stringlength(4|64)"`
 	// Determines if this User is enabled
 	Enabled bool `json:"enabled" example:"true"`
 	// A brief description of this User
@@ -35,8 +37,8 @@ type modifyUser struct {
 }
 
 type getUser struct {
-	// A unique identifier for this User
-	ID string `json:"id" example:"5e8848"`
+	// A unique identifier for this User (4-64 characters)
+	ID string `json:"id" example:"cloud"`
 	// Determines if this User is enabled
 	Enabled bool `json:"enabled" example:"true"`
 	// A brief description of this User

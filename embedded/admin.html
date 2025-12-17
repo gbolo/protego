@@ -37,9 +37,9 @@
                 <h2><i class="fi fi-rr-lock"></i> Admin Authentication</h2>
                 <div class="form-group">
                     <label>Admin Secret</label>
-                    <input type="password" id="admin-secret" placeholder="Enter admin secret">
+                    <input type="password" id="admin-secret" placeholder="Enter admin secret" autocomplete="off">
                 </div>
-                <button class="btn btn-primary btn-block" id="auth-button">
+                <button type="button" class="btn btn-primary btn-block" id="auth-button">
                     <i class="fi fi-rr-unlock"></i>
                     <span>Authenticate</span>
                 </button>
@@ -239,6 +239,11 @@
             <span class="close" onclick="closeUserModal()">&times;</span>
             <h2 id="user-modal-title">Add User</h2>
             
+            <div class="form-group">
+                <label>User ID * <span class="help-text">(4-64 characters, immutable)</span></label>
+                <input type="text" id="user-id" placeholder="cloud" autocomplete="off">
+            </div>
+
             <div class="form-group" id="user-secret-field">
                 <label>Secret * <span class="help-text">(required for new users)</span></label>
                 <input type="password" id="user-secret" placeholder="User secret">

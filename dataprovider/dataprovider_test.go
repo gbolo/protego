@@ -101,11 +101,13 @@ func newTestProvider(t *testing.T, impl string) Provider {
 }
 
 func newTestUser(id string) *User {
+	// Hash the secret since the User struct stores hashed secrets
+	hashedSecret, _ := hashSecret("supersecret")
 	return &User{
 		Enabled:         true,
 		Description:     "test user " + id,
 		ID:              id,
-		Secret:          "supersecret",
+		Secret:          hashedSecret,
 		ACLAllowAll:     false,
 		ACLAllowedHosts: []string{"git.example.com", "wiki.example.com"},
 		DNSNames:        []string{"myhome.no-ip.info"},

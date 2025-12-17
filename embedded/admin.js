@@ -15,7 +15,10 @@ const API_BASE = '/api/v1';
 // ============================================================================
 
 function authenticate() {
+  console.log('authenticate() called');
   const secret = $('#admin-secret').val();
+  console.log('Secret length:', secret ? secret.length : 0);
+  
   if (!secret) {
     showAuthError('Please enter admin secret');
     return;
@@ -29,6 +32,7 @@ function authenticate() {
     url: `${API_BASE}/user`,
     headers: { 'Admin-Secret': adminSecret },
     success: function() {
+      console.log('Authentication successful');
       // Save to localStorage on successful authentication
       localStorage.setItem('protego-admin-secret', adminSecret);
       
@@ -43,7 +47,8 @@ function authenticate() {
       loadACLs();
       loadUsers();
     },
-    error: function() {
+    error: function(xhr, status, error) {
+      console.error('Authentication failed:', status, error, xhr);
       showAuthError('Authentication failed. Please check your admin secret.');
       adminSecret = '';
       // Clear from localStorage on failed auth
@@ -96,6 +101,7 @@ function logout() {
     $('#dashboard-section').hide();
     $('#logout-btn').hide();
     $('#admin-secret').val('');
+    $('#auth-error').hide();
   }
 }
 
@@ -618,6 +624,13 @@ function openUserModal(isEdit = false, user = null) {
   
   if (isEdit && user) {
     $('#user-modal-title').text('Edit User');
+    
+    // ID field: show but make readonly (immutable)
+    $('#user-id').val(user.id);
+    $('#user-id').prop('readonly', true);
+    $('#user-id').css('background-color', 'var(--border-color)');
+    $('#user-id').css('cursor', 'not-allowed');
+    
     $('#user-secret-field').hide();
     $('#user-enabled').prop('checked', user.enabled);
     $('#user-description').val(user.description || '');
@@ -630,6 +643,13 @@ function openUserModal(isEdit = false, user = null) {
     $('#delete-user-btn').show();
   } else {
     $('#user-modal-title').text('Add User');
+    
+    // ID field: clear and make editable for new users
+    $('#user-id').val('');
+    $('#user-id').prop('readonly', false);
+    $('#user-id').css('background-color', '');
+    $('#user-id').css('cursor', '');
+    
     $('#user-secret-field').show();
     $('#user-secret').val('');
     $('#user-enabled').prop('checked', true);
@@ -652,6 +672,7 @@ function closeUserModal() {
 }
 
 function saveUser() {
+  const userId = $('#user-id').val().trim();
   const secret = $('#user-secret').val().trim();
   const enabled = $('#user-enabled').is(':checked');
   const description = $('#user-description').val().trim();
@@ -662,9 +683,20 @@ function saveUser() {
   
   const isEdit = currentUserEdit !== null;
   
-  if (!isEdit && !secret) {
-    showNotification('Secret is required for new users', 'error');
-    return;
+  // Validation for new users
+  if (!isEdit) {
+    if (!userId) {
+      showNotification('User ID is required', 'error');
+      return;
+    }
+    if (userId.length < 4 || userId.length > 64) {
+      showNotification('User ID must be between 4 and 64 characters', 'error');
+      return;
+    }
+    if (!secret) {
+      showNotification('Secret is required for new users', 'error');
+      return;
+    }
   }
   
   const aclAllowedHosts = aclAllowedHostsStr
@@ -684,8 +716,9 @@ function saveUser() {
     ttl_minutes: ttlMinutes
   };
   
-  // Add secret only for new users
+  // Add ID and secret only for new users
   if (!isEdit) {
+    userData.id = userId;
     userData.secret = secret;
   }
   
@@ -932,6 +965,8 @@ function loadVersion() {
 // ============================================================================
 
 $(document).ready(function() {
+  console.log('Document ready, initializing admin panel');
+  
   // Load version info
   loadVersion();
   
@@ -939,9 +974,20 @@ $(document).ready(function() {
   tryAutoAuthenticate();
   
   // Auth section
-  $('#auth-button').on('click', authenticate);
+  console.log('Setting up auth button handler');
+  $('#auth-button').on('click', function(e) {
+    console.log('Auth button clicked');
+    e.preventDefault();
+    authenticate();
+  });
+  
   $('#admin-secret').on('keyup', function(e) {
+    console.log('Keyup on admin-secret, keyCode:', e.keyCode);
+    // Hide error message when user starts typing
+    $('#auth-error').hide();
+    
     if (e.keyCode === 13) {
+      e.preventDefault();
       authenticate();
     }
   });

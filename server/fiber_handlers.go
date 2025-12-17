@@ -1,7 +1,6 @@
 package server
 
 import (
-	"errors"
 	"time"
 
 	validate "github.com/asaskevich/govalidator"
@@ -9,6 +8,12 @@ import (
 	"github.com/gbolo/protego/internal/meta"
 	"github.com/gofiber/fiber/v2"
 	"github.com/spf13/viper"
+)
+
+const (
+	// User ID validation constraints
+	minUserIDLength = 4
+	maxUserIDLength = 64
 )
 
 // fiberHandlerVersion godoc
@@ -76,9 +81,10 @@ func fiberHandlerAuthorize(c *fiber.Ctx) error {
 // @Tags Authorization
 // @Produce  json
 // @Param X-Real-IP header string true "IP address of the user"
+// @Param User-ID header string true "User ID (4-64 characters)"
 // @Param User-Secret header string true "Secret that was given to/by the user"
 // @Success 200 "challenge was accepted: the value of X-Real-IP has been granted an ACL" {object} challengeResponse
-// @Failure 400 "bad request: X-Real-IP is not set" {object} errorResponse
+// @Failure 400 "bad request: X-Real-IP is not set or User-ID is invalid" {object} errorResponse
 // @Failure 401 "unauthorized: the user secret is incorrect or the user is disabled" {object} errorResponse
 // @Failure 500 "server could not process the request" {object} errorResponse
 // @Router /challenge [post]
@@ -90,23 +96,37 @@ func fiberHandlerChallenge(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"Unable to properly determine user's IP address"})
 	}
 
+	userID := c.Get("User-ID")
 	clientSecret := c.Get("User-Secret")
-	user, err := dataprovider.NewUser(clientSecret, "")
-	if errors.Is(err, dataprovider.ErrSecretLength) {
-		log.Infof("user %s was denied due to challenge failure", clientIP)
+
+	// Validate User-ID length
+	if len(userID) < minUserIDLength || len(userID) > maxUserIDLength {
+		log.Infof("user challenge failed due to invalid User-ID length from IP %s", clientIP)
+		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"User-ID must be between 4 and 64 characters"})
+	}
+
+	// Validate secret length
+	if len(clientSecret) < 6 {
+		log.Infof("user %s was denied due to invalid secret length from IP %s", userID, clientIP)
 		return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"User-Secret is incorrect"})
 	}
 
 	// check if this user exists
-	actualUser, err := dataProvider.GetUser(user.ID)
+	actualUser, err := dataProvider.GetUser(userID)
 	if actualUser == nil || err != nil {
-		log.Infof("user %s was denied due to incorrect secret", clientIP)
+		log.Infof("user %s was denied - user not found from IP %s", userID, clientIP)
 		return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"unable to find user"})
+	}
+
+	// verify the secret matches
+	if verifyErr := dataprovider.VerifySecret(actualUser.Secret, clientSecret); verifyErr != nil {
+		log.Infof("user %s was denied due to incorrect secret from IP %s", userID, clientIP)
+		return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"User-Secret is incorrect"})
 	}
 
 	// deny the user if it is disabled
 	if !actualUser.Enabled {
-		log.Infof("user %s was denied due to being disabled", clientIP)
+		log.Infof("user %s was denied due to being disabled from IP %s", userID, clientIP)
 		return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"this user is currently disabled"})
 	}
 
@@ -130,7 +150,7 @@ func fiberHandlerChallenge(c *fiber.Ctx) error {
 	}
 
 	// log a warning if we will be merging a different user ACLs together
-	if existingAcl != nil && !existingAcl.CheckUserId(user.ID) {
+	if existingAcl != nil && !existingAcl.CheckUserId(actualUser.ID) {
 		log.Warningf("other user(s) %v already have an ACL for client IP: %s. Will need to merge ACls", existingAcl.UserIDs, clientIP)
 	}
 
@@ -142,7 +162,7 @@ func fiberHandlerChallenge(c *fiber.Ctx) error {
 	}
 
 	// successful response
-	log.Infof("user %s with IP (%s) has been added to ACL", user.ID, clientIP)
+	log.Infof("user %s with IP (%s) has been added to ACL", actualUser.ID, clientIP)
 	apiResponse := challengeResponse{
 		Message:   "access has been granted",
 		UserId:    actualUser.ID,
@@ -154,7 +174,7 @@ func fiberHandlerChallenge(c *fiber.Ctx) error {
 
 // fiberHandlerUserAdd godoc
 // @Summary Add a new user
-// @Description Creates a new user with the provided configuration. User ID is automatically generated from the secret.
+// @Description Creates a new user with the provided configuration. User ID must be provided (4-64 characters).
 // @Tags User Management
 // @Accept json
 // @Produce json
@@ -177,12 +197,21 @@ func fiberHandlerUserAdd(c *fiber.Ctx) error {
 	}
 
 	// Validate required fields
+	if req.ID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"user ID is required"})
+	}
+
 	if req.Secret == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"secret is required"})
 	}
 
-	// Create user - ID is automatically generated from secret
-	user, err := dataprovider.NewUser(req.Secret, req.Description)
+	// Validate ID using govalidator
+	if _, err := validate.ValidateStruct(req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{err.Error()})
+	}
+
+	// Create user with admin-defined ID
+	user, err := dataprovider.NewUser(req.ID, req.Secret, req.Description)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{err.Error()})
 	}
