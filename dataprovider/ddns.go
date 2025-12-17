@@ -1,6 +1,7 @@
 package dataprovider
 
 import (
+	"context"
 	"net"
 	"sync"
 	"time"
@@ -29,8 +30,8 @@ func NewDdnsProvider() (p DdnsProvider) {
 
 func (p *DdnsProvider) ProcessUsers(users []User) {
 	log.Debugf("processing %d user(s)", len(users))
-	for _, user := range users {
-		p.ProcessUser(&user)
+	for i := range users {
+		p.ProcessUser(&users[i])
 	}
 }
 
@@ -58,9 +59,7 @@ func (p *DdnsProvider) DeleteUser(user *User) {
 	}
 	p.lock.Lock()
 	for _, fqdn := range user.DNSNames {
-		if _, ok := p.fqdns[fqdn]; ok {
-			delete(p.fqdns, fqdn)
-		}
+		delete(p.fqdns, fqdn)
 	}
 	p.lock.Unlock()
 	p.updateACLs()
@@ -80,17 +79,20 @@ func (p *DdnsProvider) updateACLs() {
 		return
 	}
 	acls := make(map[string]ACL)
+	resolver := &net.Resolver{}
+	ctx := context.Background()
+
 	for fqdn, acl := range p.fqdns {
-		ips, err := net.LookupIP(fqdn)
+		addrs, err := resolver.LookupIPAddr(ctx, fqdn)
 		if err != nil {
 			log.Errorf("unable to perform a DNS lookup for %s: %v", fqdn, err)
 		}
-		if len(ips) > 0 {
+		if len(addrs) > 0 {
 			// we ONLY use the first IP address, and ignore everything else
-			if len(ips) > 1 {
-				log.Warningf("the following dns lookup (%s) resulted in more than one (%d) IPs. Only using the first one %s", fqdn, len(ips), ips[0])
+			if len(addrs) > 1 {
+				log.Warningf("the following dns lookup (%s) resulted in more than one (%d) IPs. Only using the first one %s", fqdn, len(addrs), addrs[0].IP)
 			}
-			acls[ips[0].String()] = acl
+			acls[addrs[0].IP.String()] = acl
 		}
 	}
 	log.Debugf("adding %d ACLs", len(acls))

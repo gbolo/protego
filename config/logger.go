@@ -7,7 +7,7 @@ import (
 )
 
 // logFormat is an RFC 5424 style log format
-//const logFormat = `%{level:.1s} %{time:2006-01-02 15:04:05} %{program}[%{pid}]: %{id:05d} %{shortfile} %{shortfunc} %{message}`
+// const logFormat = `%{level:.1s} %{time:2006-01-02 15:04:05} %{program}[%{pid}]: %{id:05d} %{shortfile} %{shortfunc} %{message}`
 
 // I like this format better for troubleshooting. TODO: make this configurable
 const logFormat = `%{level:.1s} %{time:2006-01-02 15:04:05} (%{shortpkg} %{shortfile}) [%{shortfunc}] %{message}`
@@ -20,7 +20,6 @@ func GetLogger() *logging.Logger {
 }
 
 func loggingInit(logLevelString string) {
-
 	// In case of an invalid log level we default to ERROR
 	var logLevel = logging.ERROR
 
@@ -34,10 +33,8 @@ func loggingInit(logLevelString string) {
 	}
 
 	// Special logging format for the logs
-	var logFormatter logging.Formatter
-
 	// RFC 5424 style log format
-	logFormatter = logging.MustStringFormatter(logFormat)
+	logFormatter := logging.MustStringFormatter(logFormat)
 
 	// Configure log backends
 	logBackend := logging.NewLogBackend(os.Stdout, "", 0)

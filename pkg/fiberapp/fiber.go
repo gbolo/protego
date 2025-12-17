@@ -49,7 +49,7 @@ func GetFiberApp(appName string) (app *fiber.App) {
 	addFiberMiddlewareMetrics(app)
 	addFiberMiddlewareFavicon(app)
 
-	return
+	return app
 }
 
 // Recover from panics

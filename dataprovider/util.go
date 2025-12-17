@@ -13,12 +13,6 @@ func hashSecret(secret string) (bcryptHash string, err error) {
 	return string(bytes), err
 }
 
-// checkSecretHash validates that the secret matches the hash (using bcrypt).
-func checkSecretHash(secret, bcryptHash string) (isMatch bool) {
-	err := bcrypt.CompareHashAndPassword([]byte(bcryptHash), []byte(secret))
-	return err == nil
-}
-
 // generateIdFromSecret will generate a small ID (6 chars) based on the secret.
 // this is NOT used to prove the client has the correct passphrase,
 // it is only used to identify the client, otherwise the we would need to provide

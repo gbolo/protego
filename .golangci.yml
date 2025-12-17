@@ -28,18 +28,18 @@ linters:
     - errorlint
     - funlen
     - gocheckcompilerdirectives
-    - gochecknoinits
+#    - gochecknoinits
     - goconst
     - gocritic
     - gocyclo
     - godox
-    - mnd
+#    - mnd
     - goprintffuncname
     - gosec
     - govet
     - intrange
     - ineffassign
-    - lll
+#    - lll
     - misspell
     - nakedret
     - noctx
@@ -211,8 +211,5 @@ formatters:
         - github.com/golangci/golangci-lint/v2
   exclusions:
     paths:
-      - test/testdata_etc # test files
-      - internal/go # extracted from Go code
-      - internal/x # extracted from x/tools code
-      - pkg/goformatters/gci/internal # extracted from gci code
-      - pkg/goanalysis/runner_checker.go # extracted from x/tools code
+      - testdata # test files
+      - embedded # web ui

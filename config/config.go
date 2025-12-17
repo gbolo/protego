@@ -17,7 +17,6 @@ var (
 // ConfigInit instantiates and validates the configuration options
 // optionally it can print out a configuration summary
 func ConfigInit(cfgFile string, printConfig bool) {
-
 	// init viper
 	initViper(cfgFile)
 
@@ -30,13 +29,10 @@ func ConfigInit(cfgFile string, printConfig bool) {
 	sanityChecks()
 
 	// assign variable values to config values...
-
-	return
 }
 
 // setup viper
 func initViper(cfgFile string) {
-
 	// Set some defaults
 	viper.SetDefault("log_level", "DEBUG")
 	viper.SetDefault("server.bind_address", "127.0.0.1")
@@ -74,7 +70,6 @@ func initViper(cfgFile string) {
 
 // prints the config options
 func printConfigSummary() {
-
 	log.Debugf("Configuration:\n")
 	for _, c := range []string{
 		"log_level",

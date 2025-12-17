@@ -12,6 +12,7 @@ import (
 	"github.com/gbolo/protego/pkg/fiberapp"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // -----------------------------------------------------------------------------
@@ -56,18 +57,19 @@ func setupTestFiberApp(t *testing.T) interface {
 // -----------------------------------------------------------------------------
 
 func TestFiberHandlerVersion(t *testing.T) {
-	app := setupTestFiberApp(t)
+	app := setupTestFiberApp(t) //nolint:bodyclose // False positive: setupTestFiberApp doesn't return response
 
-	req, _ := http.NewRequest("GET", "/api/v1/version", nil)
+	req, _ := http.NewRequestWithContext(t.Context(), "GET", "/api/v1/version", http.NoBody)
 	res, err := app.Test(req, -1)
+	require.NoError(t, err)
+	defer res.Body.Close()
 
-	assert.Nil(t, err)
 	assert.Equal(t, 200, res.StatusCode)
 
 	body, _ := io.ReadAll(res.Body)
 	var v version
 	err = json.Unmarshal(body, &v)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, v.Version)
 	assert.NotEmpty(t, v.BuildRef)
 }
@@ -77,7 +79,7 @@ func TestFiberHandlerVersion(t *testing.T) {
 // -----------------------------------------------------------------------------
 
 func TestFiberHandlerUserCRUD(t *testing.T) {
-	app := setupTestFiberApp(t)
+	app := setupTestFiberApp(t) //nolint:bodyclose // False positive: setupTestFiberApp doesn't return response
 
 	// Test data
 	var userId string // Will be set from response
@@ -94,18 +96,19 @@ func TestFiberHandlerUserCRUD(t *testing.T) {
 	// 1. Add user
 	t.Run("AddUser", func(t *testing.T) {
 		createBytes, _ := json.Marshal(createReqBody)
-		req, _ := http.NewRequest("POST", "/api/v1/user", bytes.NewReader(createBytes))
+		req, _ := http.NewRequestWithContext(t.Context(), "POST", "/api/v1/user", bytes.NewReader(createBytes))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Admin-Secret", "test-admin-secret")
 
 		res, err := app.Test(req, -1)
-		assert.Nil(t, err)
+		require.NoError(t, err)
+		defer res.Body.Close()
 		assert.Equal(t, 201, res.StatusCode)
 
 		body, _ := io.ReadAll(res.Body)
 		var user getUser
 		err = json.Unmarshal(body, &user)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		assert.NotEmpty(t, user.ID)
 		userId = user.ID // Store for subsequent tests
 		assert.Equal(t, "Test User", user.Description)
@@ -114,17 +117,18 @@ func TestFiberHandlerUserCRUD(t *testing.T) {
 
 	// 2. Get user
 	t.Run("GetUser", func(t *testing.T) {
-		req, _ := http.NewRequest("GET", "/api/v1/user/"+userId, nil)
+		req, _ := http.NewRequestWithContext(t.Context(), "GET", "/api/v1/user/"+userId, http.NoBody)
 		req.Header.Set("Admin-Secret", "test-admin-secret")
 
 		res, err := app.Test(req, -1)
-		assert.Nil(t, err)
+		require.NoError(t, err)
+		defer res.Body.Close()
 		assert.Equal(t, 200, res.StatusCode)
 
 		body, _ := io.ReadAll(res.Body)
 		var user getUser
 		err = json.Unmarshal(body, &user)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, userId, user.ID)
 	})
 
@@ -139,18 +143,19 @@ func TestFiberHandlerUserCRUD(t *testing.T) {
 			TTLMinutes:      120,
 		}
 		updateBytes, _ := json.Marshal(updateReqBody)
-		req, _ := http.NewRequest("PUT", "/api/v1/user/"+userId, bytes.NewReader(updateBytes))
+		req, _ := http.NewRequestWithContext(t.Context(), "PUT", "/api/v1/user/"+userId, bytes.NewReader(updateBytes))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Admin-Secret", "test-admin-secret")
 
 		res, err := app.Test(req, -1)
-		assert.Nil(t, err)
+		require.NoError(t, err)
+		defer res.Body.Close()
 		assert.Equal(t, 200, res.StatusCode)
 
 		body, _ := io.ReadAll(res.Body)
 		var user getUser
 		err = json.Unmarshal(body, &user)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, "Updated User", user.Description)
 		assert.False(t, user.Enabled)
 		assert.True(t, user.ACLAllowAll)
@@ -158,43 +163,46 @@ func TestFiberHandlerUserCRUD(t *testing.T) {
 
 	// 4. Get all users
 	t.Run("GetAllUsers", func(t *testing.T) {
-		req, _ := http.NewRequest("GET", "/api/v1/user", nil)
+		req, _ := http.NewRequestWithContext(t.Context(), "GET", "/api/v1/user", http.NoBody)
 		req.Header.Set("Admin-Secret", "test-admin-secret")
 
 		res, err := app.Test(req, -1)
-		assert.Nil(t, err)
+		require.NoError(t, err)
+		defer res.Body.Close()
 		assert.Equal(t, 200, res.StatusCode)
 
 		body, _ := io.ReadAll(res.Body)
 		var users []getUser
 		err = json.Unmarshal(body, &users)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		assert.GreaterOrEqual(t, len(users), 1)
 	})
 
 	// 5. Delete user
 	t.Run("DeleteUser", func(t *testing.T) {
-		req, _ := http.NewRequest("DELETE", "/api/v1/user/"+userId, nil)
+		req, _ := http.NewRequestWithContext(t.Context(), "DELETE", "/api/v1/user/"+userId, http.NoBody)
 		req.Header.Set("Admin-Secret", "test-admin-secret")
 
 		res, err := app.Test(req, -1)
-		assert.Nil(t, err)
+		require.NoError(t, err)
+		defer res.Body.Close()
 		assert.Equal(t, 200, res.StatusCode)
 	})
 
 	// 6. Verify user is deleted
 	t.Run("GetDeletedUser", func(t *testing.T) {
-		req, _ := http.NewRequest("GET", "/api/v1/user/"+userId, nil)
+		req, _ := http.NewRequestWithContext(t.Context(), "GET", "/api/v1/user/"+userId, http.NoBody)
 		req.Header.Set("Admin-Secret", "test-admin-secret")
 
 		res, err := app.Test(req, -1)
-		assert.Nil(t, err)
+		require.NoError(t, err)
+		defer res.Body.Close()
 		assert.Equal(t, 404, res.StatusCode)
 	})
 }
 
 func TestFiberHandlerUserUnauthorized(t *testing.T) {
-	app := setupTestFiberApp(t)
+	app := setupTestFiberApp(t) //nolint:bodyclose // False positive: setupTestFiberApp doesn't return response
 
 	tests := []struct {
 		description string
@@ -235,12 +243,13 @@ func TestFiberHandlerUserUnauthorized(t *testing.T) {
 				reqBody, _ = json.Marshal(test.body)
 			}
 
-			req, _ := http.NewRequest(test.method, test.route, bytes.NewReader(reqBody))
+			req, _ := http.NewRequestWithContext(t.Context(), test.method, test.route, bytes.NewReader(reqBody))
 			req.Header.Set("Content-Type", "application/json")
 			// Not setting Admin-Secret header
 
 			res, err := app.Test(req, -1)
-			assert.Nil(t, err)
+			require.NoError(t, err)
+			defer res.Body.Close()
 			assert.Equal(t, 401, res.StatusCode)
 		})
 	}
@@ -251,7 +260,7 @@ func TestFiberHandlerUserUnauthorized(t *testing.T) {
 // -----------------------------------------------------------------------------
 
 func TestFiberHandlerACLCRUD(t *testing.T) {
-	app := setupTestFiberApp(t)
+	app := setupTestFiberApp(t) //nolint:bodyclose // False positive: setupTestFiberApp doesn't return response
 
 	// Test data
 	testIP := "192.168.1.100"
@@ -266,36 +275,38 @@ func TestFiberHandlerACLCRUD(t *testing.T) {
 	// 1. Add ACL
 	t.Run("AddACL", func(t *testing.T) {
 		createBytes, _ := json.Marshal(createReqBody)
-		req, _ := http.NewRequest("POST", "/api/v1/acl/"+testIP, bytes.NewReader(createBytes))
+		req, _ := http.NewRequestWithContext(t.Context(), "POST", "/api/v1/acl/"+testIP, bytes.NewReader(createBytes))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Admin-Secret", "test-admin-secret")
 
 		res, err := app.Test(req, -1)
-		assert.Nil(t, err)
+		require.NoError(t, err)
+		defer res.Body.Close()
 		assert.Equal(t, 201, res.StatusCode)
 
 		body, _ := io.ReadAll(res.Body)
 		var acl getACL
 		err = json.Unmarshal(body, &acl)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, testIP, acl.IPAddress)
 		assert.False(t, acl.AllowAll)
-		assert.Equal(t, 2, len(acl.AllowedHosts))
+		assert.Len(t, acl.AllowedHosts, 2)
 	})
 
 	// 2. Get ACL
 	t.Run("GetACL", func(t *testing.T) {
-		req, _ := http.NewRequest("GET", "/api/v1/acl/"+testIP, nil)
+		req, _ := http.NewRequestWithContext(t.Context(), "GET", "/api/v1/acl/"+testIP, http.NoBody)
 		req.Header.Set("Admin-Secret", "test-admin-secret")
 
 		res, err := app.Test(req, -1)
-		assert.Nil(t, err)
+		require.NoError(t, err)
+		defer res.Body.Close()
 		assert.Equal(t, 200, res.StatusCode)
 
 		body, _ := io.ReadAll(res.Body)
 		var acl getACL
 		err = json.Unmarshal(body, &acl)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, testIP, acl.IPAddress)
 	})
 
@@ -308,91 +319,97 @@ func TestFiberHandlerACLCRUD(t *testing.T) {
 			TTL:          nil,
 		}
 		updateBytes, _ := json.Marshal(updateReqBody)
-		req, _ := http.NewRequest("PUT", "/api/v1/acl/"+testIP, bytes.NewReader(updateBytes))
+		req, _ := http.NewRequestWithContext(t.Context(), "PUT", "/api/v1/acl/"+testIP, bytes.NewReader(updateBytes))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Admin-Secret", "test-admin-secret")
 
 		res, err := app.Test(req, -1)
-		assert.Nil(t, err)
+		require.NoError(t, err)
+		defer res.Body.Close()
 		assert.Equal(t, 200, res.StatusCode)
 
 		body, _ := io.ReadAll(res.Body)
 		var acl getACL
 		err = json.Unmarshal(body, &acl)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		assert.True(t, acl.AllowAll)
-		assert.Equal(t, 1, len(acl.UserIDs))
+		assert.Len(t, acl.UserIDs, 1)
 	})
 
 	// 4. Get all ACLs
 	t.Run("GetAllACLs", func(t *testing.T) {
-		req, _ := http.NewRequest("GET", "/api/v1/acl", nil)
+		req, _ := http.NewRequestWithContext(t.Context(), "GET", "/api/v1/acl", http.NoBody)
 		req.Header.Set("Admin-Secret", "test-admin-secret")
 
 		res, err := app.Test(req, -1)
-		assert.Nil(t, err)
+		require.NoError(t, err)
+		defer res.Body.Close()
 		assert.Equal(t, 200, res.StatusCode)
 
 		body, _ := io.ReadAll(res.Body)
 		var acls []getACL
 		err = json.Unmarshal(body, &acls)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		assert.GreaterOrEqual(t, len(acls), 1)
 	})
 
 	// 5. Delete ACL
 	t.Run("DeleteACL", func(t *testing.T) {
-		req, _ := http.NewRequest("DELETE", "/api/v1/acl/"+testIP, nil)
+		req, _ := http.NewRequestWithContext(t.Context(), "DELETE", "/api/v1/acl/"+testIP, http.NoBody)
 		req.Header.Set("Admin-Secret", "test-admin-secret")
 
 		res, err := app.Test(req, -1)
-		assert.Nil(t, err)
+		require.NoError(t, err)
+		defer res.Body.Close()
 		assert.Equal(t, 200, res.StatusCode)
 	})
 
 	// 6. Verify ACL is deleted
 	t.Run("GetDeletedACL", func(t *testing.T) {
-		req, _ := http.NewRequest("GET", "/api/v1/acl/"+testIP, nil)
+		req, _ := http.NewRequestWithContext(t.Context(), "GET", "/api/v1/acl/"+testIP, http.NoBody)
 		req.Header.Set("Admin-Secret", "test-admin-secret")
 
 		res, err := app.Test(req, -1)
-		assert.Nil(t, err)
+		require.NoError(t, err)
+		defer res.Body.Close()
 		assert.Equal(t, 404, res.StatusCode)
 	})
 }
 
 func TestFiberHandlerACLInvalidIP(t *testing.T) {
-	app := setupTestFiberApp(t)
+	app := setupTestFiberApp(t) //nolint:bodyclose // False positive: setupTestFiberApp doesn't return response
 
 	t.Run("invalid IP format", func(t *testing.T) {
 		createReqBody := addACL{AllowAll: true}
 		createBytes, _ := json.Marshal(createReqBody)
 
-		req, _ := http.NewRequest("POST", "/api/v1/acl/not-an-ip", bytes.NewReader(createBytes))
+		req, _ := http.NewRequestWithContext(t.Context(), "POST", "/api/v1/acl/not-an-ip", bytes.NewReader(createBytes))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Admin-Secret", "test-admin-secret")
 
 		res, err := app.Test(req, -1)
-		assert.Nil(t, err)
+		require.NoError(t, err)
+		defer res.Body.Close()
 		assert.Equal(t, 400, res.StatusCode)
 	})
 }
 
 func TestFiberHandlerACLGetAllEmpty(t *testing.T) {
-	app := setupTestFiberApp(t)
+	app := setupTestFiberApp(t) //nolint:bodyclose // False positive: setupTestFiberApp doesn't return response
 
-	req, _ := http.NewRequest("GET", "/api/v1/acl", nil)
+	req, _ := http.NewRequestWithContext(t.Context(), "GET", "/api/v1/acl", http.NoBody)
 	req.Header.Set("Admin-Secret", "test-admin-secret")
 
 	res, err := app.Test(req, -1)
-	assert.Nil(t, err)
+	require.NoError(t, err)
+	defer res.Body.Close()
 	assert.Equal(t, 200, res.StatusCode)
 
 	body, _ := io.ReadAll(res.Body)
 	var acls []getACL
 	err = json.Unmarshal(body, &acls)
-	assert.Nil(t, err)
-	assert.Equal(t, 0, len(acls))
+	require.NoError(t, err)
+	assert.Empty(t, acls)
 }
 
 // -----------------------------------------------------------------------------
@@ -400,7 +417,7 @@ func TestFiberHandlerACLGetAllEmpty(t *testing.T) {
 // -----------------------------------------------------------------------------
 
 func TestFiberRoutes(t *testing.T) {
-	app := setupTestFiberApp(t)
+	app := setupTestFiberApp(t) //nolint:bodyclose // False positive: setupTestFiberApp doesn't return response
 
 	tests := []struct {
 		description  string
@@ -430,10 +447,11 @@ func TestFiberRoutes(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.description, func(t *testing.T) {
-			req, _ := http.NewRequest(test.method, test.route, nil)
+			req, _ := http.NewRequestWithContext(t.Context(), test.method, test.route, http.NoBody)
 			res, err := app.Test(req, -1)
+			require.NoError(t, err)
+			defer res.Body.Close()
 
-			assert.Nil(t, err)
 			assert.Equal(t, test.expectedCode, res.StatusCode)
 		})
 	}
@@ -444,7 +462,7 @@ func TestFiberRoutes(t *testing.T) {
 // -----------------------------------------------------------------------------
 
 func TestFiberHandlerChallenge_MergeACLsForSameIP(t *testing.T) {
-	app := setupTestFiberApp(t)
+	app := setupTestFiberApp(t) //nolint:bodyclose // False positive: setupTestFiberApp doesn't return response
 
 	const (
 		userSecret1 = "secret-user-1"
@@ -466,35 +484,37 @@ func TestFiberHandlerChallenge_MergeACLsForSameIP(t *testing.T) {
 		}
 		b1, _ := json.Marshal(reqBody1)
 
-		req, _ := http.NewRequest("POST", "/api/v1/user", bytes.NewReader(b1))
+		req, _ := http.NewRequestWithContext(t.Context(), "POST", "/api/v1/user", bytes.NewReader(b1))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Admin-Secret", "test-admin-secret")
 
 		res, err := app.Test(req, -1)
-		assert.Nil(t, err)
+		require.NoError(t, err)
+		defer res.Body.Close()
 		assert.Equal(t, 201, res.StatusCode)
 	})
 
 	// --- First challenge with user1 ---
 	var firstTTL *time.Time
 	t.Run("First challenge creates ACL for user1", func(t *testing.T) {
-		req, _ := http.NewRequest("POST", "/api/v1/challenge", nil)
+		req, _ := http.NewRequestWithContext(t.Context(), "POST", "/api/v1/challenge", http.NoBody)
 		req.Header.Set("X-Real-IP", clientIP)
 		req.Header.Set("User-Secret", userSecret1)
 
 		res, err := app.Test(req, -1)
-		assert.Nil(t, err)
+		require.NoError(t, err)
+		defer res.Body.Close()
 		assert.Equal(t, 202, res.StatusCode)
 
 		body, _ := io.ReadAll(res.Body)
 		var chResp challengeResponse
 		err = json.Unmarshal(body, &chResp)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, clientIP, chResp.IpAddress)
-		assert.Equal(t, 1, len(chResp.ACL.AllowedHosts))
-		assert.Equal(t, host1, chResp.ACL.AllowedHosts[0])
-		assert.NotNil(t, chResp.ACL.TTL)
-		firstTTL = chResp.ACL.TTL
+		assert.Len(t, chResp.AllowedHosts, 1)
+		assert.Equal(t, host1, chResp.AllowedHosts[0])
+		assert.NotNil(t, chResp.TTL)
+		firstTTL = chResp.TTL
 	})
 
 	// --- Create second user with longer TTL and AllowAll=true ---
@@ -509,39 +529,41 @@ func TestFiberHandlerChallenge_MergeACLsForSameIP(t *testing.T) {
 		}
 		b2, _ := json.Marshal(reqBody2)
 
-		req, _ := http.NewRequest("POST", "/api/v1/user", bytes.NewReader(b2))
+		req, _ := http.NewRequestWithContext(t.Context(), "POST", "/api/v1/user", bytes.NewReader(b2))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Admin-Secret", "test-admin-secret")
 
 		res, err := app.Test(req, -1)
-		assert.Nil(t, err)
+		require.NoError(t, err)
+		defer res.Body.Close()
 		assert.Equal(t, 201, res.StatusCode)
 	})
 
 	// --- Second challenge with SAME IP but user2's secret ---
 	t.Run("Second challenge merges ACLs", func(t *testing.T) {
-		req, _ := http.NewRequest("POST", "/api/v1/challenge", nil)
+		req, _ := http.NewRequestWithContext(t.Context(), "POST", "/api/v1/challenge", http.NoBody)
 		req.Header.Set("X-Real-IP", clientIP)
 		req.Header.Set("User-Secret", userSecret2)
 
 		res, err := app.Test(req, -1)
-		assert.Nil(t, err)
+		require.NoError(t, err)
+		defer res.Body.Close()
 		assert.Equal(t, 202, res.StatusCode)
 
 		body, _ := io.ReadAll(res.Body)
 		var chResp challengeResponse
 		err = json.Unmarshal(body, &chResp)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 
 		// --- Assert merged ACL properties ---
 
 		// AllowAll: true should win
-		assert.True(t, chResp.ACL.AllowAll, "merged ACL should have AllowAll=true")
+		assert.True(t, chResp.AllowAll, "merged ACL should have AllowAll=true")
 
 		// AllowedHosts: union of host1 and host2
-		assert.GreaterOrEqual(t, len(chResp.ACL.AllowedHosts), 2, "merged ACL should have at least 2 hosts")
+		assert.GreaterOrEqual(t, len(chResp.AllowedHosts), 2, "merged ACL should have at least 2 hosts")
 		hostSet := make(map[string]struct{})
-		for _, h := range chResp.ACL.AllowedHosts {
+		for _, h := range chResp.AllowedHosts {
 			hostSet[h] = struct{}{}
 		}
 		_, hasHost1 := hostSet[host1]
@@ -550,39 +572,42 @@ func TestFiberHandlerChallenge_MergeACLsForSameIP(t *testing.T) {
 		assert.True(t, hasHost2, "merged ACL should contain host2")
 
 		// TTL: greater of the two should win (or at least not be earlier)
-		assert.NotNil(t, chResp.ACL.TTL, "merged ACL should have TTL")
-		assert.False(t, chResp.ACL.TTL.Before(*firstTTL), "merged ACL TTL should be >= first TTL")
+		assert.NotNil(t, chResp.TTL, "merged ACL should have TTL")
+		assert.False(t, chResp.TTL.Before(*firstTTL), "merged ACL TTL should be >= first TTL")
 	})
 
 	// --- Verify authorization works for both hosts ---
 	t.Run("Authorize host1 after merge", func(t *testing.T) {
-		req, _ := http.NewRequest("GET", "/api/v1/authorize", nil)
+		req, _ := http.NewRequestWithContext(t.Context(), "GET", "/api/v1/authorize", http.NoBody)
 		req.Header.Set("X-Real-IP", clientIP)
 		req.Host = host1
 
 		res, err := app.Test(req, -1)
-		assert.Nil(t, err)
+		require.NoError(t, err)
+		defer res.Body.Close()
 		assert.Equal(t, 200, res.StatusCode, "should authorize host1 after ACL merge")
 	})
 
 	t.Run("Authorize host2 after merge", func(t *testing.T) {
-		req, _ := http.NewRequest("GET", "/api/v1/authorize", nil)
+		req, _ := http.NewRequestWithContext(t.Context(), "GET", "/api/v1/authorize", http.NoBody)
 		req.Header.Set("X-Real-IP", clientIP)
 		req.Host = host2
 
 		res, err := app.Test(req, -1)
-		assert.Nil(t, err)
+		require.NoError(t, err)
+		defer res.Body.Close()
 		assert.Equal(t, 200, res.StatusCode, "should authorize host2 after ACL merge")
 	})
 
 	// --- Verify AllowAll works ---
 	t.Run("Authorize any host with AllowAll", func(t *testing.T) {
-		req, _ := http.NewRequest("GET", "/api/v1/authorize", nil)
+		req, _ := http.NewRequestWithContext(t.Context(), "GET", "/api/v1/authorize", http.NoBody)
 		req.Header.Set("X-Real-IP", clientIP)
 		req.Host = "random.example.com"
 
 		res, err := app.Test(req, -1)
-		assert.Nil(t, err)
+		require.NoError(t, err)
+		defer res.Body.Close()
 		assert.Equal(t, 200, res.StatusCode, "should authorize any host when AllowAll=true")
 	})
 }

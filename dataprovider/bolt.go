@@ -25,40 +25,45 @@ func NewBoltProvider() (p BoltProvider, err error) {
 	return
 }
 
-func (p *BoltProvider) InitializeDatabase() (err error) {
+func (p *BoltProvider) InitializeDatabase() error {
 	boltDbFile := viper.GetString("db.bolt.file")
 	if p.dbHandle != nil {
-		return
+		return nil
 	}
+
+	var err error
 	p.dbHandle, err = bolt.Open(boltDbFile, 0600, &bolt.Options{
 		NoGrowSync: false,
 		//FreelistType: bolt.FreelistArrayType,
 		Timeout: 5 * time.Second})
-	if err == nil {
-		log.Infof("bolt key/value store handle created")
-		err = p.dbHandle.Update(func(tx *bolt.Tx) error {
-			_, e := tx.CreateBucketIfNotExists(userBucket)
-			return e
-		})
-		if err != nil {
-			log.Errorf("error creating user bucket: %v", err)
-			return err
-		}
-		err = p.dbHandle.Update(func(tx *bolt.Tx) error {
-			_, e := tx.CreateBucketIfNotExists(aclBucket)
-			return e
-		})
-		if err != nil {
-			log.Errorf("error creating acl bucket: %v", err)
-			return err
-		}
-	} else {
+	if err != nil {
 		log.Errorf("error creating bolt key/value store handle: %v", err)
+		return err
 	}
-	return err
+
+	log.Infof("bolt key/value store handle created")
+	err = p.dbHandle.Update(func(tx *bolt.Tx) error {
+		_, e := tx.CreateBucketIfNotExists(userBucket)
+		return e
+	})
+	if err != nil {
+		log.Errorf("error creating user bucket: %v", err)
+		return err
+	}
+
+	err = p.dbHandle.Update(func(tx *bolt.Tx) error {
+		_, e := tx.CreateBucketIfNotExists(aclBucket)
+		return e
+	})
+	if err != nil {
+		log.Errorf("error creating acl bucket: %v", err)
+		return err
+	}
+
+	return nil
 }
 
-func (p *BoltProvider) CheckAvailability() error {
+func (*BoltProvider) CheckAvailability() error {
 	return nil
 }
 
@@ -89,8 +94,7 @@ func (p *BoltProvider) GetACL(ip string) (acl *ACL, err error) {
 	}
 	// retrieve the acl
 	err = p.dbHandle.View(func(tx *bolt.Tx) error {
-		var aclBytes []byte
-		aclBytes = tx.Bucket(aclBucket).Get([]byte(ip))
+		aclBytes := tx.Bucket(aclBucket).Get([]byte(ip))
 		if len(aclBytes) > 1 {
 			// serialize aclBytes into acl
 			return json.Unmarshal(aclBytes, &acl)
@@ -136,7 +140,9 @@ func (p *BoltProvider) GetAllACLs() (map[string]*ACL, error) {
 	// Clean up expired ACLs
 	for _, ip := range expiredIPs {
 		log.Infof("user IP (%s) TTL has expired. Removing from database", ip)
-		p.RemoveIp(ip)
+		if removeErr := p.RemoveIp(ip); removeErr != nil {
+			log.Errorf("failed to remove expired IP %s: %v", ip, removeErr)
+		}
 	}
 
 	return result, err
@@ -191,15 +197,14 @@ func (p *BoltProvider) GetUser(id string) (user *User, err error) {
 	}
 	// retrieve the user
 	err = p.dbHandle.View(func(tx *bolt.Tx) error {
-		var userBytes []byte
-		userBytes = tx.Bucket(userBucket).Get([]byte(id))
+		userBytes := tx.Bucket(userBucket).Get([]byte(id))
 		if len(userBytes) > 1 {
 			// serialize userBytes into user
 			return json.Unmarshal(userBytes, &user)
 		}
 		return nil
 	})
-	return
+	return user, err
 }
 
 func (p *BoltProvider) UpdateUser(u *User) error {

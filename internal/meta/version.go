@@ -38,7 +38,7 @@ func PrintVersion() {
 `, Version, BuildDate, CommitSHA, runtime.Version(), runtime.Compiler, runtime.GOOS, runtime.GOARCH)
 }
 
-func GetAppMetadata(appName string) appMetadata {
+func GetAppMetadata(appName string) *appMetadata {
 	info := appMetadata{
 		AppName:    appName,
 		AppVersion: Version,
@@ -52,9 +52,9 @@ func GetAppMetadata(appName string) appMetadata {
 	if info.AppVersion == "" {
 		info.AppVersion = "devel"
 	}
-	return info
+	return &info
 }
 
-func (i appMetadata) ToString() string {
+func (i *appMetadata) ToString() string {
 	return fmt.Sprintf("%s version: %s (ref-%s), platform: %s [%s]", i.AppName, i.AppVersion, i.CommitRef, i.GoVersion, i.GoPlatform)
 }

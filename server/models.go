@@ -115,15 +115,16 @@ func getUserConvert(user *dataprovider.User) getUser {
 }
 
 func getAllUsersConvert(users []dataprovider.User) (getUsers []getUser) {
-	for _, user := range users {
+	getUsers = make([]getUser, 0, len(users))
+	for i := range users {
 		getUsers = append(getUsers, getUser{
-			ID:              user.ID,
-			Enabled:         user.Enabled,
-			Description:     user.Description,
-			ACLAllowAll:     user.ACLAllowAll,
-			ACLAllowedHosts: user.ACLAllowedHosts,
-			DNSNames:        user.DNSNames,
-			TTLMinutes:      user.TTLMinutes,
+			ID:              users[i].ID,
+			Enabled:         users[i].Enabled,
+			Description:     users[i].Description,
+			ACLAllowAll:     users[i].ACLAllowAll,
+			ACLAllowedHosts: users[i].ACLAllowedHosts,
+			DNSNames:        users[i].DNSNames,
+			TTLMinutes:      users[i].TTLMinutes,
 		})
 	}
 	return

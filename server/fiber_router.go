@@ -12,17 +12,6 @@ import (
 	"github.com/gofiber/swagger"
 )
 
-const (
-	// APIVersion defines the compatibility version of the API and is appended to each API route
-	FiberAPIVersion     = "1"
-	fiberEndpointFormat = "/api/v%s/%s"
-)
-
-// getFiberEndpoint returns a properly formatted API endpoint
-func getFiberEndpoint(suffix string) string {
-	return fiberEndpointFormat + suffix
-}
-
 // setupFiberRoutes configures all routes for the Fiber app
 func setupFiberRoutes(app *fiber.App) {
 	// API v1 routes

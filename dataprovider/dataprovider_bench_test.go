@@ -135,6 +135,8 @@ func nextUserID(prefix string) string {
 // nextIPForBench generates a unique, valid IPv4 address in 10.<space>.<y>.<z>
 // - space: "namespace" (2nd octet) to avoid collisions between benchmarks
 // - each octet is in [1,254] so all IPs are valid and avoid .0/.255
+//
+//nolint:gosec // G115: Safe bounded conversions for IP octets
 func nextIPForBench(space uint8) string {
 	n := atomic.AddUint64(&globalIPCounter, 1)
 
@@ -146,6 +148,8 @@ func nextIPForBench(space uint8) string {
 }
 
 // ipForIndex is deterministic and used for prepopulation in GetACL benchmark
+//
+//nolint:gosec // G115: Safe bounded conversions for IP octets
 func ipForIndex(space uint8, i int) string {
 	n := uint64(i + 1)
 
@@ -156,7 +160,7 @@ func ipForIndex(space uint8, i int) string {
 	return fmt.Sprintf("10.%d.%d.%d", s, y, z)
 }
 
-// ---------- generic benchmark bodies (implementaion-agnostic) ----------
+// ---------- generic benchmark bodies (implementation-agnostic) ----------
 
 func benchmarkAddUserParallel(b *testing.B, p Provider) {
 	b.ReportAllocs()
@@ -177,7 +181,7 @@ func benchmarkGetUserParallel(b *testing.B, p Provider) {
 	ids := make([]string, numUsers)
 
 	// Prepopulate unique users for this benchmark.
-	for i := 0; i < numUsers; i++ {
+	for i := range numUsers {
 		id := nextUserID("bench-get-user")
 		if err := p.AddUser(newTestUserBench(id)); err != nil {
 			b.Fatalf("AddUser(%s): %v", id, err)
@@ -202,7 +206,7 @@ func benchmarkGetUserParallel(b *testing.B, p Provider) {
 
 func benchmarkGetAllUsers(b *testing.B, p Provider) {
 	const numUsers = 50_000
-	for i := 0; i < numUsers; i++ {
+	for range numUsers {
 		id := nextUserID("bench-all-user")
 		if err := p.AddUser(newTestUserBench(id)); err != nil {
 			b.Fatalf("AddUser(%s): %v", id, err)
@@ -212,7 +216,7 @@ func benchmarkGetAllUsers(b *testing.B, p Provider) {
 	b.ReportAllocs()
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		if _, err := p.GetAllUsers(); err != nil {
 			b.Fatalf("GetAllUsers: %v", err)
 		}
@@ -238,7 +242,7 @@ func benchmarkGetACLParallel(b *testing.B, p Provider) {
 	ips := make([]string, numEntries)
 
 	// Prepopulate IPs for this benchmark (AddIp runs *before* GetACL).
-	for i := 0; i < numEntries; i++ {
+	for i := range numEntries {
 		ip := ipForIndex(2, i) // namespace "2" so we don't collide with AddIp benchmark IPs
 		if err := p.AddIp(ip, newTestACLBench()); err != nil {
 			b.Fatalf("AddIp(%s): %v", ip, err)
@@ -268,7 +272,6 @@ var impls = []string{"memory", "bolt"}
 // go test -bench=BenchmarkProvider_AddUser_Parallel -benchmem
 func BenchmarkProvider_AddUser_Parallel(b *testing.B) {
 	for _, impl := range impls {
-		impl := impl // shadow for safety in closures
 		b.Run(impl, func(b *testing.B) {
 			p := getBenchmarkProvider(b, impl)
 			benchmarkAddUserParallel(b, p)
@@ -278,7 +281,6 @@ func BenchmarkProvider_AddUser_Parallel(b *testing.B) {
 
 func BenchmarkProvider_GetUser_Parallel(b *testing.B) {
 	for _, impl := range impls {
-		impl := impl
 		b.Run(impl, func(b *testing.B) {
 			p := getBenchmarkProvider(b, impl)
 			benchmarkGetUserParallel(b, p)
@@ -288,7 +290,6 @@ func BenchmarkProvider_GetUser_Parallel(b *testing.B) {
 
 func BenchmarkProvider_GetAllUsers(b *testing.B) {
 	for _, impl := range impls {
-		impl := impl
 		b.Run(impl, func(b *testing.B) {
 			p := getBenchmarkProvider(b, impl)
 			benchmarkGetAllUsers(b, p)
@@ -298,7 +299,6 @@ func BenchmarkProvider_GetAllUsers(b *testing.B) {
 
 func BenchmarkProvider_AddIp_Parallel(b *testing.B) {
 	for _, impl := range impls {
-		impl := impl
 		b.Run(impl, func(b *testing.B) {
 			p := getBenchmarkProvider(b, impl)
 			benchmarkAddIpParallel(b, p)
@@ -308,7 +308,6 @@ func BenchmarkProvider_AddIp_Parallel(b *testing.B) {
 
 func BenchmarkProvider_GetACL_Parallel(b *testing.B) {
 	for _, impl := range impls {
-		impl := impl
 		b.Run(impl, func(b *testing.B) {
 			p := getBenchmarkProvider(b, impl)
 			benchmarkGetACLParallel(b, p)

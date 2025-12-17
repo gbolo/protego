@@ -25,5 +25,5 @@ type Provider interface {
 
 	// only needs a real implementation if provider does not
 	// natively support TTL
-	//MaintananceTTL() error
+	// MaintananceTTL() error
 }

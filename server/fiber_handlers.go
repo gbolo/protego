@@ -1,11 +1,12 @@
 package server
 
 import (
-	"github.com/gbolo/protego/internal/meta"
+	"errors"
 	"time"
 
 	validate "github.com/asaskevich/govalidator"
 	"github.com/gbolo/protego/dataprovider"
+	"github.com/gbolo/protego/internal/meta"
 	"github.com/gofiber/fiber/v2"
 	"github.com/spf13/viper"
 )
@@ -91,7 +92,7 @@ func fiberHandlerChallenge(c *fiber.Ctx) error {
 
 	clientSecret := c.Get("User-Secret")
 	user, err := dataprovider.NewUser(clientSecret, "")
-	if err == dataprovider.ErrSecretLength {
+	if errors.Is(err, dataprovider.ErrSecretLength) {
 		log.Infof("user %s was denied due to challenge failure", clientIP)
 		return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"User-Secret is incorrect"})
 	}

@@ -157,7 +157,6 @@ var providerImpls = []string{"memory", "bolt"}
 
 func TestProvider_UserCRUD(t *testing.T) {
 	for _, impl := range providerImpls {
-		impl := impl
 		t.Run(impl, func(t *testing.T) {
 			p := newTestProvider(t, impl)
 
@@ -181,22 +180,22 @@ func TestProvider_UserCRUD(t *testing.T) {
 			u.Enabled = false
 			u.IPs = append(u.IPs, "2.2.2.2")
 
-			if err := p.UpdateUser(u); err != nil {
-				t.Fatalf("UpdateUser: %v", err)
+			if updateErr := p.UpdateUser(u); updateErr != nil {
+				t.Fatalf("UpdateUser: %v", updateErr)
 			}
 
-			got2, err := p.GetUser(u.ID)
-			if err != nil {
-				t.Fatalf("GetUser after update: %v", err)
+			got2, err2 := p.GetUser(u.ID)
+			if err2 != nil {
+				t.Fatalf("GetUser after update: %v", err2)
 			}
 			if !reflect.DeepEqual(u, got2) {
 				t.Fatalf("GetUser after update mismatch:\nwant: %+v\n got: %+v", u, got2)
 			}
 
 			// GetAllUsers should contain at least this user
-			all, err := p.GetAllUsers()
-			if err != nil {
-				t.Fatalf("GetAllUsers: %v", err)
+			all, err3 := p.GetAllUsers()
+			if err3 != nil {
+				t.Fatalf("GetAllUsers: %v", err3)
 			}
 			found := false
 			for _, usr := range all {
@@ -210,12 +209,13 @@ func TestProvider_UserCRUD(t *testing.T) {
 			}
 
 			// Delete
-			if err := p.RemoveUser(u); err != nil {
-				t.Fatalf("RemoveUser: %v", err)
+			if deleteErr := p.RemoveUser(u); deleteErr != nil {
+				t.Fatalf("RemoveUser: %v", deleteErr)
 			}
 
-			if u, err := p.GetUser(u.ID); err != nil || u != nil {
-				t.Fatalf("GetUser after RemoveUser: expected both user and err to be nil: %v %v", u, err)
+			deletedUser, getErr := p.GetUser(u.ID)
+			if getErr != nil || deletedUser != nil {
+				t.Fatalf("GetUser after RemoveUser: expected both user and err to be nil: %v %v", deletedUser, getErr)
 			}
 		})
 	}
@@ -223,7 +223,6 @@ func TestProvider_UserCRUD(t *testing.T) {
 
 func TestProvider_AddUser_DuplicateID(t *testing.T) {
 	for _, impl := range providerImpls {
-		impl := impl
 		t.Run(impl, func(t *testing.T) {
 			p := newTestProvider(t, impl)
 
@@ -246,7 +245,6 @@ func TestProvider_AddUser_DuplicateID(t *testing.T) {
 
 func TestProvider_ACLCRUD(t *testing.T) {
 	for _, impl := range providerImpls {
-		impl := impl
 		t.Run(impl, func(t *testing.T) {
 			p := newTestProvider(t, impl)
 
@@ -271,22 +269,22 @@ func TestProvider_ACLCRUD(t *testing.T) {
 			acl.AllowAll = true
 			acl.AllowedHosts = []string{"example.com"}
 
-			if err := p.UpdateACL(ip, acl); err != nil {
-				t.Fatalf("UpdateACL: %v", err)
+			if updateErr := p.UpdateACL(ip, acl); updateErr != nil {
+				t.Fatalf("UpdateACL: %v", updateErr)
 			}
 
-			got2, err := p.GetACL(ip)
-			if err != nil {
-				t.Fatalf("GetACL after update: %v", err)
+			got2, err2 := p.GetACL(ip)
+			if err2 != nil {
+				t.Fatalf("GetACL after update: %v", err2)
 			}
 			if !equalACL(acl, got2) {
 				t.Fatalf("GetACL after update mismatch:\nwant: %+v\n got: %+v", acl, got2)
 			}
 
 			// GetAllACLs should contain this IP
-			all, err := p.GetAllACLs()
-			if err != nil {
-				t.Fatalf("GetAllACLs: %v", err)
+			all, err3 := p.GetAllACLs()
+			if err3 != nil {
+				t.Fatalf("GetAllACLs: %v", err3)
 			}
 			gotACL, ok := all[ip]
 			if !ok {
@@ -309,7 +307,6 @@ func TestProvider_ACLCRUD(t *testing.T) {
 
 func TestProvider_AddIp_Duplicate(t *testing.T) {
 	for _, impl := range providerImpls {
-		impl := impl
 		t.Run(impl, func(t *testing.T) {
 			p := newTestProvider(t, impl)
 

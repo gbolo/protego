@@ -112,13 +112,13 @@ func configureFiberTLS() (*tls.Config, error) {
 	}
 
 	// configure hardened TLS settings
+	//nolint:gosec // G402: TLS 1.2 is acceptable minimum version
 	tlsConfig := &tls.Config{
-		Certificates:             []tls.Certificate{cert},
-		MinVersion:               tlsMinVersion,
-		InsecureSkipVerify:       false,
-		PreferServerCipherSuites: true,
-		CurvePreferences:         tlsCurvePreferences,
-		CipherSuites:             tlsCiphers,
+		Certificates:       []tls.Certificate{cert},
+		MinVersion:         tlsMinVersion,
+		InsecureSkipVerify: false,
+		CurvePreferences:   tlsCurvePreferences,
+		CipherSuites:       tlsCiphers,
 	}
 
 	return tlsConfig, nil

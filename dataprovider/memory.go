@@ -28,7 +28,7 @@ func (p *MemoryProvider) InitializeDatabase() (err error) {
 	return nil
 }
 
-func (p *MemoryProvider) CheckAvailability() error {
+func (*MemoryProvider) CheckAvailability() error {
 	return nil
 }
 
@@ -49,9 +49,7 @@ func (p *MemoryProvider) RemoveIp(ip string) error {
 	// remove the acl
 	p.lock.Lock()
 	defer p.lock.Unlock()
-	if _, ok := p.acls[ip]; ok {
-		delete(p.acls, ip)
-	}
+	delete(p.acls, ip)
 	return nil
 }
 
@@ -133,9 +131,7 @@ func (p *MemoryProvider) RemoveUser(u *User) error {
 	// remove the user
 	p.lock.Lock()
 	defer p.lock.Unlock()
-	if _, ok := p.users[u.ID]; ok {
-		delete(p.users, u.ID)
-	}
+	delete(p.users, u.ID)
 	return nil
 }
 
@@ -156,8 +152,9 @@ func (p *MemoryProvider) GetUser(id string) (user *User, err error) {
 func (p *MemoryProvider) GetAllUsers() (users []User, err error) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
-	for _, user := range p.users {
-		users = append(users, user)
+	users = make([]User, 0, len(p.users))
+	for key := range p.users {
+		users = append(users, p.users[key])
 	}
 	return
 }
