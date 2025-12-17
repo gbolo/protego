@@ -42,8 +42,8 @@ func setupTestFiberApp(t *testing.T) interface {
 	}
 	dataProvider = &mp
 
-	// Initialize ddnsProvider
-	ddnsProvider = dataprovider.NewDdnsProvider()
+	// Initialize ddnsProvider with data provider reference
+	ddnsProvider = dataprovider.NewDdnsProvider(dataProvider)
 
 	// Create Fiber app
 	app := fiberapp.GetFiberApp("Protego-Test")

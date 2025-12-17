@@ -245,9 +245,9 @@ func fiberHandlerUserAdd(c *fiber.Ctx) error {
 
 	log.Infof("user added: %s", user.ID)
 
-	// Process user for DDNS if DNS names are provided
-	if len(user.DNSNames) > 0 {
-		ddnsProvider.ProcessUser(user)
+	// Notify DDNS provider to sync this user
+	if err := ddnsProvider.SyncUser(user.ID); err != nil {
+		log.Warningf("failed to sync user %s to DDNS provider: %v", user.ID, err)
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(getUserConvert(user))
@@ -312,6 +312,12 @@ func fiberHandlerUserUpdate(c *fiber.Ctx) error {
 	}
 
 	log.Infof("user updated: %s", existingUser.ID)
+
+	// Notify DDNS provider to sync this user
+	if err := ddnsProvider.SyncUser(existingUser.ID); err != nil {
+		log.Warningf("failed to sync user %s to DDNS provider: %v", existingUser.ID, err)
+	}
+
 	return c.JSON(getUserConvert(existingUser))
 }
 
@@ -403,6 +409,10 @@ func fiberHandlerUserDelete(c *fiber.Ctx) error {
 	}
 
 	log.Infof("user deleted: %s", id)
+
+	// Notify DDNS provider to remove this user
+	ddnsProvider.RemoveUser(user.ID)
+
 	return c.JSON(getUserConvert(user))
 }
 

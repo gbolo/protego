@@ -53,14 +53,12 @@ func InitFiberServer(p dataprovider.Provider) error {
 	}
 	// set the data provider
 	dataProvider = p
-	// set the dynamic dns provider
-	ddnsProvider = dataprovider.NewDdnsProvider()
-	// populate any existing users from dataprovider into ddnsprovider
-	users, err := dataProvider.GetAllUsers()
-	if err != nil {
+	// set the dynamic dns provider (pass data provider reference for syncing)
+	ddnsProvider = dataprovider.NewDdnsProvider(dataProvider)
+	// sync all existing users from dataprovider into ddnsprovider
+	if err := ddnsProvider.SyncAllUsers(); err != nil {
 		return err
 	}
-	ddnsProvider.ProcessUsers(users)
 	// start fiber http server
 	return startFiberServer()
 }
