@@ -147,8 +147,14 @@ func getACLConvert(ipAddress string, acl *dataprovider.ACL) getACL {
 }
 
 func getAllACLsConvert(acls map[string]*dataprovider.ACL) (getACLs []getACL) {
+	// Pre-allocate slice
+	getACLs = make([]getACL, 0, len(acls))
+
+	// Directly iterate - map iteration is safe in Go
 	for ip, acl := range acls {
-		getACLs = append(getACLs, getACLConvert(ip, acl))
+		if acl != nil {
+			getACLs = append(getACLs, getACLConvert(ip, acl))
+		}
 	}
 	return
 }

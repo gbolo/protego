@@ -1,6 +1,7 @@
 package server
 
 import (
+	"strings"
 	"time"
 
 	validate "github.com/asaskevich/govalidator"
@@ -89,15 +90,21 @@ func fiberHandlerAuthorize(c *fiber.Ctx) error {
 // @Failure 500 "server could not process the request" {object} errorResponse
 // @Router /challenge [post]
 func fiberHandlerChallenge(c *fiber.Ctx) error {
+	// IMPORTANT: Fiber reuses buffers for headers, so we must copy strings to avoid corruption
+	// Using c.Copy() on the full context or strings.Clone() ensures strings have independent backing arrays
+	// see: https://docs.gofiber.io/#zero-allocation for more details
 	clientIP := c.Get("X-Real-IP")
+	clientIP = strings.Clone(clientIP) // Create independent copy
+
 	if !validate.IsIP(clientIP) {
 		log.Errorf("X-Real-IP is either set incorrectly or missing! DENYING ACCESS")
 		log.Debugf("X-Real-IP is of length %d with value: %s", len(clientIP), clientIP)
 		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"Unable to properly determine user's IP address"})
 	}
 
-	userID := c.Get("User-ID")
-	clientSecret := c.Get("User-Secret")
+	// Copy these strings too to prevent buffer reuse corruption
+	userID := strings.Clone(c.Get("User-ID"))
+	clientSecret := strings.Clone(c.Get("User-Secret"))
 
 	// Validate User-ID length
 	if len(userID) < minUserIDLength || len(userID) > maxUserIDLength {
