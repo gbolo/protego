@@ -392,7 +392,7 @@ select option:checked {
 /* ACL Table Header */
 .acl-header {
     display: grid;
-    grid-template-columns: 140px 100px minmax(200px, 1fr) minmax(200px, 1fr) 110px;
+    grid-template-columns: 280px 100px minmax(200px, 1fr) minmax(200px, 1fr) 110px;
     gap: 12px;
     padding: 10px 16px;
     background: rgba(99, 102, 241, 0.05);
@@ -424,6 +424,17 @@ select option:checked {
     cursor: pointer;
 }
 
+.user-card-clickable.user-disabled {
+    background: rgba(245, 158, 11, 0.15);
+    border-color: rgba(245, 158, 11, 0.4);
+}
+
+.user-card-clickable.user-disabled:hover {
+    background: rgba(245, 158, 11, 0.2);
+    border-color: var(--warning-color);
+    box-shadow: 0 8px 20px rgba(245, 158, 11, 0.3);
+}
+
 /* Compact ACL Row Style (table-like) */
 .acl-row {
     background: var(--surface-color);
@@ -432,7 +443,7 @@ select option:checked {
     padding: 12px 16px;
     transition: all 0.2s;
     display: grid;
-    grid-template-columns: 140px 100px minmax(200px, 1fr) minmax(200px, 1fr) 110px;
+    grid-template-columns: 280px 100px minmax(200px, 1fr) minmax(200px, 1fr) 110px;
     gap: 12px;
     align-items: start;
     cursor: pointer;
@@ -472,6 +483,8 @@ select option:checked {
     font-weight: 600;
     font-size: 0.95em;
     color: var(--text-color);
+    word-break: break-all;
+    font-family: 'Monaco', 'Courier New', monospace;
 }
 
 .acl-row .clickable-ip {
@@ -479,7 +492,8 @@ select option:checked {
     color: var(--primary-color);
     transition: all 0.2s;
     text-decoration: none;
-    font-size: 1.1em;
+    font-size: 0.95em;
+    font-family: 'Monaco', 'Courier New', monospace;
 }
 
 .acl-row .clickable-ip:hover {

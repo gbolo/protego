@@ -593,8 +593,10 @@ function renderUsers(users) {
       ? `<div class="tag-list">${userIPs.map(ip => `<span class="tag tag-primary">${escapeHtml(ip)}</span>`).join('')}</div>`
       : '<span class="tag tag-secondary">No active IPs</span>';
     
+    const disabledClass = !user.enabled ? 'user-disabled' : '';
+    
     const card = $(`
-      <div class="item-card user-card-clickable" data-user-id="${escapeHtml(user.id)}">
+      <div class="item-card user-card-clickable ${disabledClass}" data-user-id="${escapeHtml(user.id)}">
         <div class="item-header">
           <div class="item-title">
             <div class="item-name"><code>${escapeHtml(user.id)}</code></div>
