@@ -637,7 +637,13 @@ function openUserModal(isEdit = false, user = null) {
     $('#user-acl-allow-all').prop('checked', user.acl_allow_all);
     $('#user-acl-allowed-hosts').val(user.acl_allowed_hosts ? user.acl_allowed_hosts.join(', ') : '');
     $('#user-dns-names').val(user.dns_names ? user.dns_names.join(', ') : '');
-    $('#user-ttl-minutes').val(user.ttl_minutes || '');
+    
+    // Convert minutes to hours for display
+    const ttlHours = user.ttl_minutes ? Math.round(user.ttl_minutes / 60) : '';
+    $('#user-ttl-minutes').val(ttlHours);
+    
+    // Highlight preset button if it matches
+    highlightTTLPreset(user.ttl_minutes || 0);
     
     // Show delete button when editing
     $('#delete-user-btn').show();
@@ -659,11 +665,24 @@ function openUserModal(isEdit = false, user = null) {
     $('#user-dns-names').val('');
     $('#user-ttl-minutes').val('');
     
+    // Clear all TTL preset selections
+    $('.ttl-preset-btn').removeClass('active');
+    
     // Hide delete button when adding
     $('#delete-user-btn').hide();
   }
   
   $('#user-modal').show();
+}
+
+// Helper function to highlight TTL preset button if value matches
+function highlightTTLPreset(minutes) {
+  $('.ttl-preset-btn').removeClass('active');
+  $('.ttl-preset-btn').each(function() {
+    if (parseInt($(this).data('minutes')) === minutes) {
+      $(this).addClass('active');
+    }
+  });
 }
 
 function closeUserModal() {
@@ -679,7 +698,10 @@ function saveUser() {
   const aclAllowAll = $('#user-acl-allow-all').is(':checked');
   const aclAllowedHostsStr = $('#user-acl-allowed-hosts').val().trim();
   const dnsNamesStr = $('#user-dns-names').val().trim();
-  const ttlMinutes = parseInt($('#user-ttl-minutes').val()) || 0;
+  
+  // Get TTL in hours and convert to minutes
+  const ttlHours = parseInt($('#user-ttl-minutes').val()) || 0;
+  const ttlMinutes = ttlHours * 60;
   
   const isEdit = currentUserEdit !== null;
   
@@ -697,6 +719,16 @@ function saveUser() {
       showNotification('Secret is required for new users', 'error');
       return;
     }
+  }
+  
+  // TTL validation (required, never 0, max 3 months = 2160 hours = 129600 minutes)
+  if (ttlMinutes === 0 || ttlHours === 0) {
+    showNotification('TTL is required and cannot be 0 (unlimited is not allowed)', 'error');
+    return;
+  }
+  if (ttlMinutes > 129600) {
+    showNotification('TTL cannot exceed 3 months (2160 hours)', 'error');
+    return;
   }
   
   const aclAllowedHosts = aclAllowedHostsStr
@@ -1026,6 +1058,41 @@ $(document).ready(function() {
   $('#filter-user-desc').on('input', applyUserFilters);
   $('#filter-user-has-ips').on('change', applyUserFilters);
   $('#clear-user-filters').on('click', clearUserFilters);
+  
+  // TTL preset buttons (event delegation for dynamic content)
+  $(document).on('click', '.ttl-preset-btn', function() {
+    const minutes = parseInt($(this).data('minutes'));
+    const hours = Math.round(minutes / 60);
+    
+    // Set the custom input field to the preset value (in hours)
+    $('#user-ttl-minutes').val(hours);
+    
+    // Highlight the selected preset
+    $('.ttl-preset-btn').removeClass('active');
+    $(this).addClass('active');
+  });
+  
+  // Clear preset selection when custom value is entered
+  $('#user-ttl-minutes').on('input', function() {
+    const customHours = parseInt($(this).val()) || 0;
+    const customMinutes = customHours * 60;
+    
+    // Check if it matches any preset
+    let matchesPreset = false;
+    $('.ttl-preset-btn').each(function() {
+      if (parseInt($(this).data('minutes')) === customMinutes) {
+        $(this).addClass('active');
+        matchesPreset = true;
+      } else {
+        $(this).removeClass('active');
+      }
+    });
+    
+    // If no preset matches, clear all selections
+    if (!matchesPreset) {
+      $('.ttl-preset-btn').removeClass('active');
+    }
+  });
   
   // Close modal on background click
   $('.modal').on('click', function(e) {

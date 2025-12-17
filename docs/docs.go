@@ -17,18 +17,18 @@ const docTemplate = `{
     "paths": {
         "/acl": {
             "get": {
-                "description": "get all ACLs",
+                "description": "Returns a list of all ACLs",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "ACL"
+                    "ACL Management"
                 ],
-                "summary": "Retrieve all ACLs",
+                "summary": "Get all ACLs",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Admin Secret",
+                        "description": "Admin secret for authentication",
                         "name": "Admin-Secret",
                         "in": "header",
                         "required": true
@@ -43,33 +43,45 @@ const docTemplate = `{
                                 "$ref": "#/definitions/server.getACL"
                             }
                         }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
                     }
                 }
             }
         },
         "/acl/{ip}": {
             "get": {
-                "description": "get ACL by IP address",
+                "description": "Returns ACL details for a specific IP address",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "ACL"
+                    "ACL Management"
                 ],
-                "summary": "Retrieve an ACL for a specific IP address",
+                "summary": "Get ACL details",
                 "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Admin Secret",
-                        "name": "Admin-Secret",
-                        "in": "header",
-                        "required": true
-                    },
                     {
                         "type": "string",
                         "description": "IP Address",
                         "name": "ip",
                         "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Admin secret for authentication",
+                        "name": "Admin-Secret",
+                        "in": "header",
                         "required": true
                     }
                 ],
@@ -79,11 +91,29 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/server.getACL"
                         }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
                     }
                 }
             },
             "put": {
-                "description": "update ACL by json for a specific IP address",
+                "description": "Updates ACL configuration for an IP address",
                 "consumes": [
                     "application/json"
                 ],
@@ -91,17 +121,10 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "ACL"
+                    "ACL Management"
                 ],
-                "summary": "Update an existing ACL for an IP address",
+                "summary": "Update an existing ACL",
                 "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Admin Secret",
-                        "name": "Admin-Secret",
-                        "in": "header",
-                        "required": true
-                    },
                     {
                         "type": "string",
                         "description": "IP Address",
@@ -110,7 +133,14 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "Update ACL",
+                        "type": "string",
+                        "description": "Admin secret for authentication",
+                        "name": "Admin-Secret",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "ACL configuration",
                         "name": "acl",
                         "in": "body",
                         "required": true,
@@ -125,11 +155,35 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/server.getACL"
                         }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
                     }
                 }
             },
             "post": {
-                "description": "add ACL by json for a specific IP address",
+                "description": "Creates a new ACL for an IP address",
                 "consumes": [
                     "application/json"
                 ],
@@ -137,17 +191,10 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "ACL"
+                    "ACL Management"
                 ],
-                "summary": "Add a new ACL for an IP address",
+                "summary": "Add a new ACL",
                 "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Admin Secret",
-                        "name": "Admin-Secret",
-                        "in": "header",
-                        "required": true
-                    },
                     {
                         "type": "string",
                         "description": "IP Address",
@@ -156,7 +203,14 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "Add ACL",
+                        "type": "string",
+                        "description": "Admin secret for authentication",
+                        "name": "Admin-Secret",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "ACL configuration",
                         "name": "acl",
                         "in": "body",
                         "required": true,
@@ -166,36 +220,51 @@ const docTemplate = `{
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "OK",
+                    "201": {
+                        "description": "Created",
                         "schema": {
                             "$ref": "#/definitions/server.getACL"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
                         }
                     }
                 }
             },
             "delete": {
-                "description": "remove an ACL by IP address",
-                "produces": [
-                    "application/json"
-                ],
+                "description": "Deletes an ACL for a specific IP address",
                 "tags": [
-                    "ACL"
+                    "ACL Management"
                 ],
-                "summary": "Remove an ACL for a specific IP address",
+                "summary": "Delete an ACL",
                 "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Admin Secret",
-                        "name": "Admin-Secret",
-                        "in": "header",
-                        "required": true
-                    },
                     {
                         "type": "string",
                         "description": "IP Address",
                         "name": "ip",
                         "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Admin secret for authentication",
+                        "name": "Admin-Secret",
+                        "in": "header",
                         "required": true
                     }
                 ],
@@ -204,6 +273,30 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/server.getACL"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
                         }
                     }
                 }
@@ -261,6 +354,13 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
+                        "description": "User ID (4-64 characters)",
+                        "name": "User-ID",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
                         "description": "Secret that was given to/by the user",
                         "name": "User-Secret",
                         "in": "header",
@@ -272,7 +372,7 @@ const docTemplate = `{
                         "description": "challenge was accepted: the value of X-Real-IP has been granted an ACL"
                     },
                     "400": {
-                        "description": "bad request: X-Real-IP is not set"
+                        "description": "bad request: X-Real-IP is not set or User-ID is invalid"
                     },
                     "401": {
                         "description": "unauthorized: the user secret is incorrect or the user is disabled"
@@ -285,18 +385,18 @@ const docTemplate = `{
         },
         "/user": {
             "get": {
-                "description": "get all Users",
+                "description": "Returns a list of all users",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "User"
+                    "User Management"
                 ],
-                "summary": "Retrieve all Users",
+                "summary": "Get all users",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Admin Secret",
+                        "description": "Admin secret for authentication",
                         "name": "Admin-Secret",
                         "in": "header",
                         "required": true
@@ -311,11 +411,23 @@ const docTemplate = `{
                                 "$ref": "#/definitions/server.getUser"
                             }
                         }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
                     }
                 }
             },
             "post": {
-                "description": "add by json user",
+                "description": "Creates a new user with the provided configuration. User ID must be provided (4-64 characters).",
                 "consumes": [
                     "application/json"
                 ],
@@ -323,19 +435,19 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "User"
+                    "User Management"
                 ],
-                "summary": "Add a new User",
+                "summary": "Add a new user",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Admin Secret",
+                        "description": "Admin secret for authentication",
                         "name": "Admin-Secret",
                         "in": "header",
                         "required": true
                     },
                     {
-                        "description": "Add User",
+                        "description": "User configuration",
                         "name": "user",
                         "in": "body",
                         "required": true,
@@ -345,10 +457,28 @@ const docTemplate = `{
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "OK",
+                    "201": {
+                        "description": "Created",
                         "schema": {
                             "$ref": "#/definitions/server.getUser"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
                         }
                     }
                 }
@@ -356,27 +486,27 @@ const docTemplate = `{
         },
         "/user/{id}": {
             "get": {
-                "description": "get User by ID",
+                "description": "Returns details for a specific user",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "User"
+                    "User Management"
                 ],
-                "summary": "Retrieve a User based on provided ID",
+                "summary": "Get user details",
                 "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Admin Secret",
-                        "name": "Admin-Secret",
-                        "in": "header",
-                        "required": true
-                    },
                     {
                         "type": "string",
                         "description": "User ID",
                         "name": "id",
                         "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Admin secret for authentication",
+                        "name": "Admin-Secret",
+                        "in": "header",
                         "required": true
                     }
                 ],
@@ -386,11 +516,23 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/server.getUser"
                         }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
                     }
                 }
             },
             "put": {
-                "description": "update by json user",
+                "description": "Updates user configuration",
                 "consumes": [
                     "application/json"
                 ],
@@ -398,19 +540,26 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "User"
+                    "User Management"
                 ],
-                "summary": "Update an existing User",
+                "summary": "Update an existing user",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Admin Secret",
+                        "description": "User ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Admin secret for authentication",
                         "name": "Admin-Secret",
                         "in": "header",
                         "required": true
                     },
                     {
-                        "description": "Update User",
+                        "description": "User configuration",
                         "name": "user",
                         "in": "body",
                         "required": true,
@@ -425,31 +574,52 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/server.getUser"
                         }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
                     }
                 }
             },
             "delete": {
-                "description": "remove a User by ID",
-                "produces": [
-                    "application/json"
-                ],
+                "description": "Deletes a user from the system",
                 "tags": [
-                    "User"
+                    "User Management"
                 ],
-                "summary": "Remove a User based on provided ID",
+                "summary": "Delete a user",
                 "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Admin Secret",
-                        "name": "Admin-Secret",
-                        "in": "header",
-                        "required": true
-                    },
                     {
                         "type": "string",
                         "description": "User ID",
                         "name": "id",
                         "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Admin secret for authentication",
+                        "name": "Admin-Secret",
+                        "in": "header",
                         "required": true
                     }
                 ],
@@ -459,18 +629,36 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/server.getUser"
                         }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
                     }
                 }
             }
         },
         "/version": {
             "get": {
-                "description": "Retrieve the version information of this Protego server",
+                "description": "Returns version information about this server",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "Version"
+                    "Information"
                 ],
                 "summary": "Version information",
                 "responses": {
@@ -561,6 +749,11 @@ const docTemplate = `{
                     "type": "boolean",
                     "example": true
                 },
+                "id": {
+                    "description": "A unique identifier for this User (4-64 characters)",
+                    "type": "string",
+                    "example": "cloud"
+                },
                 "secret": {
                     "description": "This secret is used as a challenge to whitelist a User's IP",
                     "type": "string",
@@ -570,6 +763,14 @@ const docTemplate = `{
                     "description": "Represents the number of minutes this User's IP is whitelisted for after a successful challenge",
                     "type": "integer",
                     "example": 60
+                }
+            }
+        },
+        "server.errorResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string"
                 }
             }
         },
@@ -655,9 +856,9 @@ const docTemplate = `{
                     "example": true
                 },
                 "id": {
-                    "description": "A unique identifier for this User",
+                    "description": "A unique identifier for this User (4-64 characters)",
                     "type": "string",
-                    "example": "5e8848"
+                    "example": "cloud"
                 },
                 "ttl_minutes": {
                     "description": "Represents the number of minutes this User's IP is whitelisted for after a successful challenge",

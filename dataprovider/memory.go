@@ -161,7 +161,7 @@ func (p *MemoryProvider) GetAllUsers() (users []User, err error) {
 
 func (p *MemoryProvider) UpdateUser(u *User) error {
 	// validate the user object
-	if u == nil || len(u.ID) < 6 {
+	if u == nil || u.ID == "" {
 		return fmt.Errorf("validation error for User: %v", u)
 	}
 	// check if user already exists

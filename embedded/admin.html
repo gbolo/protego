@@ -279,8 +279,19 @@
             </div>
 
             <div class="form-group">
-                <label>TTL Minutes</label>
-                <input type="number" id="user-ttl-minutes" placeholder="60">
+                <label>TTL (Time to Live) * <span class="help-text">(required, max 3 months)</span></label>
+                <div class="ttl-presets">
+                    <button type="button" class="ttl-preset-btn" data-minutes="360">6h</button>
+                    <button type="button" class="ttl-preset-btn" data-minutes="1440">1d</button>
+                    <button type="button" class="ttl-preset-btn" data-minutes="10080">7d</button>
+                    <button type="button" class="ttl-preset-btn" data-minutes="43200">1M</button>
+                    <button type="button" class="ttl-preset-btn" data-minutes="129600">3M</button>
+                </div>
+                <div style="margin-top: 10px;">
+                    <label>Custom TTL (hours)</label>
+                    <input type="number" id="user-ttl-minutes" placeholder="24" min="1" max="2160">
+                    <small>Enter hours (1-2160, max 3 months)</small>
+                </div>
             </div>
 
             <div class="modal-actions">

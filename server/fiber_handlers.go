@@ -210,6 +210,14 @@ func fiberHandlerUserAdd(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{err.Error()})
 	}
 
+	// Validate TTL: never 0 (unlimited not allowed), max 3 months (129600 minutes)
+	if req.TTLMinutes == 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"TTL is required and cannot be 0 (unlimited is not allowed)"})
+	}
+	if req.TTLMinutes > 129600 {
+		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"TTL cannot exceed 3 months (129600 minutes)"})
+	}
+
 	// Create user with admin-defined ID
 	user, err := dataprovider.NewUser(req.ID, req.Secret, req.Description)
 	if err != nil {
@@ -273,6 +281,14 @@ func fiberHandlerUserUpdate(c *fiber.Ctx) error {
 	existingUser, err := dataProvider.GetUser(id)
 	if err != nil || existingUser == nil {
 		return c.Status(fiber.StatusNotFound).JSON(errorResponse{"user not found"})
+	}
+
+	// Validate TTL: never 0 (unlimited not allowed), max 3 months (129600 minutes)
+	if req.TTLMinutes == 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"TTL is required and cannot be 0 (unlimited is not allowed)"})
+	}
+	if req.TTLMinutes > 129600 {
+		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"TTL cannot exceed 3 months (129600 minutes)"})
 	}
 
 	// Update user properties
@@ -352,7 +368,7 @@ func fiberHandlerUserGetAll(c *fiber.Ctx) error {
 // @Tags User Management
 // @Param id path string true "User ID"
 // @Param Admin-Secret header string true "Admin secret for authentication"
-// @Success 200 {object} successResponse
+// @Success 200 {object} getUser
 // @Failure 401 {object} errorResponse
 // @Failure 404 {object} errorResponse
 // @Failure 500 {object} errorResponse
@@ -561,7 +577,7 @@ func fiberHandlerACLGetAll(c *fiber.Ctx) error {
 // @Tags ACL Management
 // @Param ip path string true "IP Address"
 // @Param Admin-Secret header string true "Admin secret for authentication"
-// @Success 200 {object} successResponse
+// @Success 200 {object} getACL
 // @Failure 400 {object} errorResponse
 // @Failure 401 {object} errorResponse
 // @Failure 404 {object} errorResponse

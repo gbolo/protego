@@ -56,6 +56,10 @@ definitions:
         description: Determines if this User is enabled
         example: true
         type: boolean
+      id:
+        description: A unique identifier for this User (4-64 characters)
+        example: cloud
+        type: string
       secret:
         description: This secret is used as a challenge to whitelist a User's IP
         example: supersecret
@@ -65,6 +69,11 @@ definitions:
           for after a successful challenge
         example: 60
         type: integer
+    type: object
+  server.errorResponse:
+    properties:
+      error:
+        type: string
     type: object
   server.getACL:
     properties:
@@ -128,8 +137,8 @@ definitions:
         example: true
         type: boolean
       id:
-        description: A unique identifier for this User
-        example: 5e8848
+        description: A unique identifier for this User (4-64 characters)
+        example: cloud
         type: string
       ttl_minutes:
         description: Represents the number of minutes this User's IP is whitelisted
@@ -214,9 +223,9 @@ info:
 paths:
   /acl:
     get:
-      description: get all ACLs
+      description: Returns a list of all ACLs
       parameters:
-      - description: Admin Secret
+      - description: Admin secret for authentication
         in: header
         name: Admin-Secret
         required: true
@@ -230,44 +239,66 @@ paths:
             items:
               $ref: '#/definitions/server.getACL'
             type: array
-      summary: Retrieve all ACLs
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+      summary: Get all ACLs
       tags:
-      - ACL
+      - ACL Management
   /acl/{ip}:
     delete:
-      description: remove an ACL by IP address
+      description: Deletes an ACL for a specific IP address
       parameters:
-      - description: Admin Secret
-        in: header
-        name: Admin-Secret
-        required: true
-        type: string
       - description: IP Address
         in: path
         name: ip
         required: true
         type: string
-      produces:
-      - application/json
+      - description: Admin secret for authentication
+        in: header
+        name: Admin-Secret
+        required: true
+        type: string
       responses:
         "200":
           description: OK
           schema:
             $ref: '#/definitions/server.getACL'
-      summary: Remove an ACL for a specific IP address
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+      summary: Delete an ACL
       tags:
-      - ACL
+      - ACL Management
     get:
-      description: get ACL by IP address
+      description: Returns ACL details for a specific IP address
       parameters:
-      - description: Admin Secret
-        in: header
-        name: Admin-Secret
-        required: true
-        type: string
       - description: IP Address
         in: path
         name: ip
+        required: true
+        type: string
+      - description: Admin secret for authentication
+        in: header
+        name: Admin-Secret
         required: true
         type: string
       produces:
@@ -277,25 +308,37 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/server.getACL'
-      summary: Retrieve an ACL for a specific IP address
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+      summary: Get ACL details
       tags:
-      - ACL
+      - ACL Management
     post:
       consumes:
       - application/json
-      description: add ACL by json for a specific IP address
+      description: Creates a new ACL for an IP address
       parameters:
-      - description: Admin Secret
-        in: header
-        name: Admin-Secret
-        required: true
-        type: string
       - description: IP Address
         in: path
         name: ip
         required: true
         type: string
-      - description: Add ACL
+      - description: Admin secret for authentication
+        in: header
+        name: Admin-Secret
+        required: true
+        type: string
+      - description: ACL configuration
         in: body
         name: acl
         required: true
@@ -304,29 +347,41 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
-          description: OK
+        "201":
+          description: Created
           schema:
             $ref: '#/definitions/server.getACL'
-      summary: Add a new ACL for an IP address
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+      summary: Add a new ACL
       tags:
-      - ACL
+      - ACL Management
     put:
       consumes:
       - application/json
-      description: update ACL by json for a specific IP address
+      description: Updates ACL configuration for an IP address
       parameters:
-      - description: Admin Secret
-        in: header
-        name: Admin-Secret
-        required: true
-        type: string
       - description: IP Address
         in: path
         name: ip
         required: true
         type: string
-      - description: Update ACL
+      - description: Admin secret for authentication
+        in: header
+        name: Admin-Secret
+        required: true
+        type: string
+      - description: ACL configuration
         in: body
         name: acl
         required: true
@@ -339,9 +394,25 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/server.getACL'
-      summary: Update an existing ACL for an IP address
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+      summary: Update an existing ACL
       tags:
-      - ACL
+      - ACL Management
   /authorize:
     get:
       description: Configure NGINX auth_request to this endpoint
@@ -374,6 +445,11 @@ paths:
         name: X-Real-IP
         required: true
         type: string
+      - description: User ID (4-64 characters)
+        in: header
+        name: User-ID
+        required: true
+        type: string
       - description: Secret that was given to/by the user
         in: header
         name: User-Secret
@@ -386,7 +462,7 @@ paths:
           description: 'challenge was accepted: the value of X-Real-IP has been granted
             an ACL'
         "400":
-          description: 'bad request: X-Real-IP is not set'
+          description: 'bad request: X-Real-IP is not set or User-ID is invalid'
         "401":
           description: 'unauthorized: the user secret is incorrect or the user is
             disabled'
@@ -397,9 +473,9 @@ paths:
       - Authorization
   /user:
     get:
-      description: get all Users
+      description: Returns a list of all users
       parameters:
-      - description: Admin Secret
+      - description: Admin secret for authentication
         in: header
         name: Admin-Secret
         required: true
@@ -413,20 +489,29 @@ paths:
             items:
               $ref: '#/definitions/server.getUser'
             type: array
-      summary: Retrieve all Users
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+      summary: Get all users
       tags:
-      - User
+      - User Management
     post:
       consumes:
       - application/json
-      description: add by json user
+      description: Creates a new user with the provided configuration. User ID must
+        be provided (4-64 characters).
       parameters:
-      - description: Admin Secret
+      - description: Admin secret for authentication
         in: header
         name: Admin-Secret
         required: true
         type: string
-      - description: Add User
+      - description: User configuration
         in: body
         name: user
         required: true
@@ -435,48 +520,70 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
-          description: OK
+        "201":
+          description: Created
           schema:
             $ref: '#/definitions/server.getUser'
-      summary: Add a new User
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+      summary: Add a new user
       tags:
-      - User
+      - User Management
   /user/{id}:
     delete:
-      description: remove a User by ID
+      description: Deletes a user from the system
       parameters:
-      - description: Admin Secret
-        in: header
-        name: Admin-Secret
-        required: true
-        type: string
       - description: User ID
         in: path
         name: id
         required: true
         type: string
-      produces:
-      - application/json
+      - description: Admin secret for authentication
+        in: header
+        name: Admin-Secret
+        required: true
+        type: string
       responses:
         "200":
           description: OK
           schema:
             $ref: '#/definitions/server.getUser'
-      summary: Remove a User based on provided ID
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+      summary: Delete a user
       tags:
-      - User
+      - User Management
     get:
-      description: get User by ID
+      description: Returns details for a specific user
       parameters:
-      - description: Admin Secret
-        in: header
-        name: Admin-Secret
-        required: true
-        type: string
       - description: User ID
         in: path
         name: id
+        required: true
+        type: string
+      - description: Admin secret for authentication
+        in: header
+        name: Admin-Secret
         required: true
         type: string
       produces:
@@ -486,20 +593,33 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/server.getUser'
-      summary: Retrieve a User based on provided ID
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+      summary: Get user details
       tags:
-      - User
+      - User Management
     put:
       consumes:
       - application/json
-      description: update by json user
+      description: Updates user configuration
       parameters:
-      - description: Admin Secret
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Admin secret for authentication
         in: header
         name: Admin-Secret
         required: true
         type: string
-      - description: Update User
+      - description: User configuration
         in: body
         name: user
         required: true
@@ -512,12 +632,28 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/server.getUser'
-      summary: Update an existing User
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+      summary: Update an existing user
       tags:
-      - User
+      - User Management
   /version:
     get:
-      description: Retrieve the version information of this Protego server
+      description: Returns version information about this server
       produces:
       - application/json
       responses:
@@ -527,5 +663,5 @@ paths:
             $ref: '#/definitions/server.version'
       summary: Version information
       tags:
-      - Version
+      - Information
 swagger: "2.0"
