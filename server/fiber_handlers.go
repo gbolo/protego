@@ -1,6 +1,7 @@
 package server
 
 import (
+	"github.com/gbolo/protego/internal/meta"
 	"time"
 
 	validate "github.com/asaskevich/govalidator"
@@ -17,7 +18,7 @@ import (
 // @Success 200 {object} version
 // @Router /version [get]
 func fiberHandlerVersion(c *fiber.Ctx) error {
-	return c.JSON(version{"v0.1-alpha", "git-30b8019"})
+	return c.JSON(version{meta.Version, meta.CommitSHA})
 }
 
 // fiberHandlerAuthorize godoc
@@ -198,12 +199,12 @@ func fiberHandlerUserAdd(c *fiber.Ctx) error {
 	}
 
 	log.Infof("user added: %s", user.ID)
-	
+
 	// Process user for DDNS if DNS names are provided
 	if len(user.DNSNames) > 0 {
 		ddnsProvider.ProcessUser(user)
 	}
-	
+
 	return c.Status(fiber.StatusCreated).JSON(getUserConvert(user))
 }
 
@@ -567,4 +568,3 @@ func checkAdminSecret(providedSecret string) bool {
 	configuredSecret := viper.GetString("admin.secret")
 	return configuredSecret != "" && providedSecret == configuredSecret
 }
-

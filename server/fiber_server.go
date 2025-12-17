@@ -123,4 +123,3 @@ func configureFiberTLS() (*tls.Config, error) {
 
 	return tlsConfig, nil
 }
-

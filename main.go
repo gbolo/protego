@@ -6,6 +6,7 @@ import (
 	"github.com/gbolo/protego/config"
 	"github.com/gbolo/protego/dataprovider"
 	_ "github.com/gbolo/protego/docs"
+	"github.com/gbolo/protego/internal/meta"
 	"github.com/gbolo/protego/server"
 	"github.com/spf13/viper"
 )
@@ -13,6 +14,8 @@ import (
 var log = config.GetLogger()
 
 func main() {
+	log.Infof("initializing -- %s", meta.GetAppMetadata("protego").ToString())
+
 	// init the config
 	config.ConfigInit("./testdata/sampleconfig/protego.yaml", true)
 

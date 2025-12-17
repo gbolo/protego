@@ -19,7 +19,9 @@ import (
 // -----------------------------------------------------------------------------
 
 // setupTestFiberApp sets up a fresh Fiber app with in-memory data provider
-func setupTestFiberApp(t *testing.T) interface{ Test(*http.Request, ...int) (*http.Response, error) } {
+func setupTestFiberApp(t *testing.T) interface {
+	Test(*http.Request, ...int) (*http.Response, error)
+} {
 	t.Helper()
 
 	// Clean Viper between tests
@@ -198,7 +200,7 @@ func TestFiberHandlerUserUnauthorized(t *testing.T) {
 		description string
 		route       string
 		method      string
-		body        interface{}
+		body        any
 	}{
 		{
 			description: "add user without admin secret",
@@ -584,4 +586,3 @@ func TestFiberHandlerChallenge_MergeACLsForSameIP(t *testing.T) {
 		assert.Equal(t, 200, res.StatusCode, "should authorize any host when AllowAll=true")
 	})
 }
-

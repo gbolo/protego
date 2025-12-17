@@ -5,8 +5,8 @@ import (
 	"net/http"
 
 	"github.com/gbolo/protego/asset"
-	"github.com/gbolo/protego/embedded"
 	_ "github.com/gbolo/protego/docs"
+	"github.com/gbolo/protego/embedded"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/filesystem"
 	"github.com/gofiber/swagger"
@@ -78,4 +78,3 @@ func setupFiberRoutes(app *fiber.App) {
 		Browse:     false,
 	}))
 }
-

@@ -3,12 +3,45 @@ version: '3'
 env:
   CGO_ENABLED: '0'
 
+vars:
+  # Get the full commit hash of the current HEAD
+  COMMIT_HASH:
+    sh: git rev-parse HEAD
+  # Get the short commit hash
+  SHORT_COMMIT_HASH:
+    sh: git rev-parse --short HEAD
+  # Get the current branch name
+  BRANCH_NAME:
+    sh: git rev-parse --abbrev-ref HEAD
+  # location of meta pkg to inject version info
+  METAPKG: 'github.com/gbolo/protego/internal/meta'
+  # LD flags
+  LD_FLAGS: '-X {{.METAPKG}}.Version=dev -X {{.METAPKG}}.BuildDate={{.NOW | date "2006-01-02"}} -X {{.METAPKG}}.CommitSHA={{.SHORT_COMMIT_HASH}}'
+
 tasks:
   default:
     cmds:
       - task: go:lint
       - task: go:fmt
       - task: test:unit
+
+  build:bin:
+    desc: builds the main binary
+    aliases: [b]
+    sources:
+      - './**/*.go'
+      - './embedded'
+      - go.mod
+    generates:
+      - './bin/protego'
+    cmds:
+      - go build -o ./bin/protego -ldflags '{{.LD_FLAGS}}'
+
+  build:clean:
+    desc: builds the main binary
+    aliases: [c]
+    cmds:
+      - rm -rf ./bin/protego
 
   go:lint:
     desc: Runs golangci-lint
