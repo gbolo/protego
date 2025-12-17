@@ -131,7 +131,7 @@ func generateUser() User {
 	// Generate random allowed hosts (80% chance of having some)
 	var allowedHosts []string
 	if rand.Float64() < 0.8 {
-		numHosts := rand.Intn(3) + 1
+		numHosts := rand.Intn(8) + 1
 		for i := 0; i < numHosts; i++ {
 			allowedHosts = append(allowedHosts, gofakeit.DomainName())
 		}
