@@ -166,6 +166,19 @@ function showNotification(message, type = 'success') {
   }, 5000);
 }
 
+function showModalError(modalId, message) {
+  const errorDiv = $(`#${modalId}-modal-error`);
+  errorDiv.text(message);
+  errorDiv.show();
+  
+  // Scroll modal to top to ensure error is visible
+  $(`#${modalId}-modal .modal-content`).scrollTop(0);
+}
+
+function hideModalError(modalId) {
+  $(`#${modalId}-modal-error`).hide();
+}
+
 // ============================================================================
 // Refresh All Data
 // ============================================================================
@@ -360,6 +373,9 @@ function populateUserDropdown() {
 function openACLModal(isEdit = false, acl = null) {
   currentACLEdit = acl;
   
+  // Hide any previous errors
+  hideModalError('acl');
+  
   // Populate user dropdown
   populateUserDropdown();
   
@@ -398,6 +414,9 @@ function closeACLModal() {
 }
 
 function saveACL() {
+  // Clear previous errors
+  hideModalError('acl');
+  
   const ip = $('#acl-ip').val().trim();
   const allowAll = $('#acl-allow-all').is(':checked');
   const allowedHostsStr = $('#acl-allowed-hosts').val().trim();
@@ -405,7 +424,7 @@ function saveACL() {
   const ttl = $('#acl-ttl').val().trim();
   
   if (!ip) {
-    showNotification('IP address is required', 'error');
+    showModalError('acl', 'IP address is required');
     return;
   }
   
@@ -444,7 +463,7 @@ function saveACL() {
       refreshAll();
     },
     error: function(xhr) {
-      showNotification(`Failed to ${isEdit ? 'update' : 'create'} ACL: ${xhr.responseJSON?.error || 'Unknown error'}`, 'error');
+      showModalError('acl', `Failed to ${isEdit ? 'update' : 'create'} ACL: ${xhr.responseJSON?.error || 'Unknown error'}`);
     }
   });
 }
@@ -622,6 +641,9 @@ function renderUsers(users) {
 function openUserModal(isEdit = false, user = null) {
   currentUserEdit = user;
   
+  // Hide any previous errors
+  hideModalError('user');
+  
   if (isEdit && user) {
     $('#user-modal-title').text('Edit User');
     
@@ -691,6 +713,9 @@ function closeUserModal() {
 }
 
 function saveUser() {
+  // Clear previous errors
+  hideModalError('user');
+  
   const userId = $('#user-id').val().trim();
   const secret = $('#user-secret').val().trim();
   const enabled = $('#user-enabled').is(':checked');
@@ -708,26 +733,26 @@ function saveUser() {
   // Validation for new users
   if (!isEdit) {
     if (!userId) {
-      showNotification('User ID is required', 'error');
+      showModalError('user', 'User ID is required');
       return;
     }
     if (userId.length < 4 || userId.length > 64) {
-      showNotification('User ID must be between 4 and 64 characters', 'error');
+      showModalError('user', 'User ID must be between 4 and 64 characters');
       return;
     }
     if (!secret) {
-      showNotification('Secret is required for new users', 'error');
+      showModalError('user', 'Secret is required for new users');
       return;
     }
   }
   
   // TTL validation (required, never 0, max 3 months = 2160 hours = 129600 minutes)
   if (ttlMinutes === 0 || ttlHours === 0) {
-    showNotification('TTL is required and cannot be 0 (unlimited is not allowed)', 'error');
+    showModalError('user', 'TTL is required and cannot be 0 (unlimited is not allowed)');
     return;
   }
   if (ttlMinutes > 129600) {
-    showNotification('TTL cannot exceed 3 months (2160 hours)', 'error');
+    showModalError('user', 'TTL cannot exceed 3 months (2160 hours)');
     return;
   }
   
@@ -771,7 +796,7 @@ function saveUser() {
       refreshAll();
     },
     error: function(xhr) {
-      showNotification(`Failed to ${isEdit ? 'update' : 'create'} user: ${xhr.responseJSON?.error || 'Unknown error'}`, 'error');
+      showModalError('user', `Failed to ${isEdit ? 'update' : 'create'} user: ${xhr.responseJSON?.error || 'Unknown error'}`);
     }
   });
 }
