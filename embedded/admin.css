@@ -392,7 +392,7 @@ select option:checked {
 /* ACL Table Header */
 .acl-header {
     display: grid;
-    grid-template-columns: 140px 100px 1fr 120px 100px;
+    grid-template-columns: 140px 100px 1fr 180px 110px;
     gap: 12px;
     padding: 10px 16px;
     background: rgba(99, 102, 241, 0.05);
@@ -432,7 +432,7 @@ select option:checked {
     padding: 12px 16px;
     transition: all 0.2s;
     display: grid;
-    grid-template-columns: 140px 100px 1fr 120px 100px;
+    grid-template-columns: 140px 100px 1fr 180px 110px;
     gap: 12px;
     align-items: center;
     cursor: pointer;
@@ -499,8 +499,9 @@ select option:checked {
 
 .acl-row .acl-users {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     overflow: visible;
+    min-height: 24px;
 }
 
 .acl-row .acl-ttl {
