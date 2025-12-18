@@ -286,7 +286,7 @@ header h1 {
 
 .filter-input {
     padding: 10px 14px;
-    background: var(--background-color);
+    background: var(--bg-color);
     border: 1px solid var(--border-color);
     border-radius: 8px;
     color: var(--text-color);
@@ -308,9 +308,10 @@ header h1 {
 /* Select/Dropdown styling */
 select.filter-input,
 select {
-    background: var(--background-color);
+    background: var(--bg-color);
     color: var(--text-color);
     cursor: pointer;
+    padding-right: 36px;
 }
 
 select.filter-input option,
@@ -328,7 +329,14 @@ select option:hover {
 
 select.filter-input option:checked,
 select option:checked {
-    background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+    background: var(--primary-color);
+    color: white;
+    font-weight: 600;
+}
+
+/* For multi-select, highlighted options should be clearly visible */
+select[multiple] option:checked {
+    background: var(--primary-color);
     color: white;
 }
 
@@ -340,11 +348,13 @@ select option:checked {
     color: var(--text-secondary);
     cursor: pointer;
     transition: all 0.2s;
-    display: flex;
+    display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 6px;
     font-size: 0.9em;
     white-space: nowrap;
+    line-height: 1;
 }
 
 .filter-clear-btn:hover {
@@ -356,6 +366,10 @@ select option:checked {
 
 .filter-clear-btn i {
     font-size: 16px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 /* Loading */
@@ -776,6 +790,7 @@ select option:checked {
 .form-group input[type="text"],
 .form-group input[type="password"],
 .form-group input[type="number"],
+.form-group input[type="datetime-local"],
 .form-group textarea,
 .form-group select {
     width: 100%;
@@ -787,6 +802,21 @@ select option:checked {
     font-size: 1em;
     font-family: inherit;
     transition: border-color 0.2s;
+}
+
+/* Date/time picker specific styling */
+.form-group input[type="datetime-local"] {
+    color-scheme: dark;
+}
+
+.form-group input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+    filter: brightness(0) invert(1);
+    cursor: pointer;
+    opacity: 0.8;
+}
+
+.form-group input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
 }
 
 .form-group select {
@@ -869,6 +899,7 @@ select option:checked {
 .form-group select:focus {
     outline: none;
     border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
 }
 
 .form-group input::placeholder,
@@ -1069,7 +1100,7 @@ footer .footer-links {
     display: flex;
     justify-content: center;
     align-items: center;
-    gap: 12px;
+    gap: 6px;
     margin-top: 15px;
     flex-wrap: wrap;
 }

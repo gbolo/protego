@@ -389,7 +389,17 @@ function openACLModal(isEdit = false, acl = null) {
     const userIds = acl.user_ids || [];
     $('#acl-user-ids').val(userIds);
     
-    $('#acl-ttl').val(acl.ttl || '');
+    // Convert RFC3339 TTL to datetime-local format
+    if (acl.ttl) {
+      const ttlDate = new Date(acl.ttl);
+      const localDatetime = formatDatetimeLocal(ttlDate);
+      $('#acl-ttl').val(localDatetime);
+    } else {
+      $('#acl-ttl').val('');
+    }
+    
+    // Clear preset selections
+    $('.acl-ttl-preset').removeClass('active');
     
     // Show delete button when editing
     $('#delete-acl-btn').show();
@@ -400,6 +410,9 @@ function openACLModal(isEdit = false, acl = null) {
     $('#acl-allowed-hosts').val('');
     $('#acl-user-ids').val([]);
     $('#acl-ttl').val('');
+    
+    // Clear preset selections
+    $('.acl-ttl-preset').removeClass('active');
     
     // Hide delete button when adding
     $('#delete-acl-btn').hide();
@@ -421,7 +434,7 @@ function saveACL() {
   const allowAll = $('#acl-allow-all').is(':checked');
   const allowedHostsStr = $('#acl-allowed-hosts').val().trim();
   const selectedUserIds = $('#acl-user-ids').val(); // This returns an array from multi-select
-  const ttl = $('#acl-ttl').val().trim();
+  const ttlLocal = $('#acl-ttl').val().trim();
   
   if (!ip) {
     showModalError('acl', 'IP address is required');
@@ -441,8 +454,10 @@ function saveACL() {
     user_ids: userIds
   };
   
-  if (ttl) {
-    aclData.ttl = ttl;
+  // Convert datetime-local to RFC3339 format for API
+  if (ttlLocal) {
+    const ttlDate = new Date(ttlLocal);
+    aclData.ttl = ttlDate.toISOString();
   }
   
   const isEdit = currentACLEdit !== null;
@@ -902,6 +917,16 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+function formatDatetimeLocal(date) {
+  // Format: YYYY-MM-DDTHH:mm
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
 // ============================================================================
 // Filtering
 // ============================================================================
@@ -909,9 +934,8 @@ function escapeHtml(text) {
 function applyACLFilters() {
   const ipFilter = $('#filter-acl-ip').val().toLowerCase().trim();
   const userFilter = $('#filter-acl-user').val().toLowerCase().trim();
-  const statusFilter = $('#filter-acl-status').val();
-  
-  const now = new Date();
+  const accessFilter = $('#filter-acl-access').val();
+  const hostFilter = $('#filter-acl-host').val().toLowerCase().trim();
   
   const filtered = allACLs.filter(acl => {
     // IP filter
@@ -929,20 +953,24 @@ function applyACLFilters() {
       }
     }
     
-    // Status filter
-    if (statusFilter && acl.ttl) {
-      const expiry = new Date(acl.ttl);
-      const isExpired = expiry < now;
-      
-      if (statusFilter === 'active' && isExpired) {
+    // Access filter (allow_all)
+    if (accessFilter) {
+      if (accessFilter === 'all' && !acl.allow_all) {
         return false;
       }
-      if (statusFilter === 'expired' && !isExpired) {
+      if (accessFilter === 'restricted' && acl.allow_all) {
         return false;
       }
-    } else if (statusFilter === 'expired') {
-      // If there's no TTL, it never expires, so filter it out when looking for expired ones
-      return false;
+    }
+    
+    // Allowed host filter
+    if (hostFilter) {
+      const hasMatchingHost = acl.allowed_hosts && acl.allowed_hosts.some(host => 
+        host.toLowerCase().includes(hostFilter)
+      );
+      if (!hasMatchingHost) {
+        return false;
+      }
     }
     
     return true;
@@ -954,6 +982,7 @@ function applyACLFilters() {
 function applyUserFilters() {
   const idFilter = $('#filter-user-id').val().toLowerCase().trim();
   const descFilter = $('#filter-user-desc').val().toLowerCase().trim();
+  const hostFilter = $('#filter-user-host').val().toLowerCase().trim();
   const hasIpsFilter = $('#filter-user-has-ips').val();
   
   const filtered = allUsers.filter(user => {
@@ -965,6 +994,16 @@ function applyUserFilters() {
     // Description filter
     if (descFilter && !user.description.toLowerCase().includes(descFilter)) {
       return false;
+    }
+    
+    // Allowed host filter
+    if (hostFilter) {
+      const hasMatchingHost = user.acl_allowed_hosts && user.acl_allowed_hosts.some(host => 
+        host.toLowerCase().includes(hostFilter)
+      );
+      if (!hasMatchingHost) {
+        return false;
+      }
     }
     
     // Has IPs filter
@@ -989,13 +1028,15 @@ function applyUserFilters() {
 function clearACLFilters() {
   $('#filter-acl-ip').val('');
   $('#filter-acl-user').val('');
-  $('#filter-acl-status').val('');
+  $('#filter-acl-access').val('');
+  $('#filter-acl-host').val('');
   applyACLFilters();
 }
 
 function clearUserFilters() {
   $('#filter-user-id').val('');
   $('#filter-user-desc').val('');
+  $('#filter-user-host').val('');
   $('#filter-user-has-ips').val('');
   applyUserFilters();
 }
@@ -1067,7 +1108,8 @@ $(document).ready(function() {
   // ACL filters
   $('#filter-acl-ip').on('input', applyACLFilters);
   $('#filter-acl-user').on('input', applyACLFilters);
-  $('#filter-acl-status').on('change', applyACLFilters);
+  $('#filter-acl-access').on('change', applyACLFilters);
+  $('#filter-acl-host').on('input', applyACLFilters);
   $('#clear-acl-filters').on('click', clearACLFilters);
   
   // User buttons
@@ -1083,11 +1125,12 @@ $(document).ready(function() {
   // User filters
   $('#filter-user-id').on('input', applyUserFilters);
   $('#filter-user-desc').on('input', applyUserFilters);
+  $('#filter-user-host').on('input', applyUserFilters);
   $('#filter-user-has-ips').on('change', applyUserFilters);
   $('#clear-user-filters').on('click', clearUserFilters);
   
-  // TTL preset buttons (event delegation for dynamic content)
-  $(document).on('click', '.ttl-preset-btn', function() {
+  // User TTL preset buttons (event delegation for dynamic content)
+  $(document).on('click', '.ttl-preset-btn:not(.acl-ttl-preset)', function() {
     const minutes = parseInt($(this).data('minutes'));
     const hours = Math.round(minutes / 60);
     
@@ -1095,18 +1138,34 @@ $(document).ready(function() {
     $('#user-ttl-minutes').val(hours);
     
     // Highlight the selected preset
-    $('.ttl-preset-btn').removeClass('active');
+    $('.ttl-preset-btn:not(.acl-ttl-preset)').removeClass('active');
     $(this).addClass('active');
   });
   
-  // Clear preset selection when custom value is entered
+  // ACL TTL preset buttons (event delegation for dynamic content)
+  $(document).on('click', '.acl-ttl-preset', function() {
+    const hours = parseInt($(this).data('hours'));
+    
+    // Calculate future date
+    const futureDate = new Date();
+    futureDate.setHours(futureDate.getHours() + hours);
+    
+    // Set the datetime-local input
+    $('#acl-ttl').val(formatDatetimeLocal(futureDate));
+    
+    // Highlight the selected preset
+    $('.acl-ttl-preset').removeClass('active');
+    $(this).addClass('active');
+  });
+  
+  // Clear preset selection when custom value is entered (User TTL)
   $('#user-ttl-minutes').on('input', function() {
     const customHours = parseInt($(this).val()) || 0;
     const customMinutes = customHours * 60;
     
     // Check if it matches any preset
     let matchesPreset = false;
-    $('.ttl-preset-btn').each(function() {
+    $('.ttl-preset-btn:not(.acl-ttl-preset)').each(function() {
       if (parseInt($(this).data('minutes')) === customMinutes) {
         $(this).addClass('active');
         matchesPreset = true;
@@ -1117,8 +1176,13 @@ $(document).ready(function() {
     
     // If no preset matches, clear all selections
     if (!matchesPreset) {
-      $('.ttl-preset-btn').removeClass('active');
+      $('.ttl-preset-btn:not(.acl-ttl-preset)').removeClass('active');
     }
+  });
+  
+  // Clear ACL TTL preset selection when custom datetime is entered
+  $('#acl-ttl').on('input', function() {
+    $('.acl-ttl-preset').removeClass('active');
   });
   
   // Close modal on background click

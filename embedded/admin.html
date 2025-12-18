@@ -111,12 +111,16 @@
                         <input type="text" id="filter-acl-user" class="filter-input" placeholder="Filter by User ID...">
                     </div>
                     <div class="filter-group">
-                        <label><i class="fi fi-rr-calendar"></i> Status</label>
-                        <select id="filter-acl-status" class="filter-input">
+                        <label><i class="fi fi-rr-globe"></i> Access</label>
+                        <select id="filter-acl-access" class="filter-input">
                             <option value="">All</option>
-                            <option value="active">Active</option>
-                            <option value="expired">Expired</option>
+                            <option value="all">All Hosts</option>
+                            <option value="restricted">Restricted</option>
                         </select>
+                    </div>
+                    <div class="filter-group">
+                        <label><i class="fi fi-rr-shield-check"></i> Allowed Host</label>
+                        <input type="text" id="filter-acl-host" class="filter-input" placeholder="Filter by allowed host...">
                     </div>
                     <button class="filter-clear-btn" id="clear-acl-filters">
                         <i class="fi fi-rr-cross-small"></i>
@@ -156,6 +160,10 @@
                     <div class="filter-group">
                         <label><i class="fi fi-rr-document"></i> Description</label>
                         <input type="text" id="filter-user-desc" class="filter-input" placeholder="Filter by Description...">
+                    </div>
+                    <div class="filter-group">
+                        <label><i class="fi fi-rr-shield-check"></i> Allowed Host</label>
+                        <input type="text" id="filter-user-host" class="filter-input" placeholder="Filter by allowed host...">
                     </div>
                     <div class="filter-group">
                         <label><i class="fi fi-rr-network"></i> Has IPs</label>
@@ -215,9 +223,14 @@
             </div>
 
             <div class="form-group">
-                <label>TTL <span class="help-text">(RFC3339 format)</span></label>
-                <input type="text" id="acl-ttl" placeholder="2025-12-31T23:59:59Z">
-                <small>Leave empty for no expiration</small>
+                <label>TTL (Time to Live) <span class="help-text">(optional, leave empty for no expiration)</span></label>
+                <div class="ttl-presets">
+                    <button type="button" class="ttl-preset-btn acl-ttl-preset" data-hours="6">6h</button>
+                    <button type="button" class="ttl-preset-btn acl-ttl-preset" data-hours="24">1d</button>
+                    <button type="button" class="ttl-preset-btn acl-ttl-preset" data-hours="168">7d</button>
+                </div>
+                <input type="datetime-local" id="acl-ttl" placeholder="Custom date and time">
+                <small>Choose a preset or select a custom date/time</small>
             </div>
 
             <div class="modal-actions">
@@ -317,21 +330,16 @@
         <p>Protego Administration Panel</p>
         <p class="version" id="version-info">Loading version...</p>
         <div class="footer-links">
-            <a href="/" rel="noopener noreferrer">
-                <i class="fi fi-rr-home"></i>
-                <span>Home</span>
-            </a>
-            <span class="separator">•</span>
             <a href="https://github.com/gbolo/protego" target="_blank" rel="noopener noreferrer">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
                 </svg>
-                <span>GitHub</span>
+                <span>github.com/gbolo/protego</span>
             </a>
             <span class="separator">•</span>
             <a href="/swagger" rel="noopener noreferrer">
                 <i class="fi fi-rr-laptop-code"></i>
-                <span>API Docs</span>
+                <span>OpenAPI Swagger Docs</span>
             </a>
         </div>
     </footer>
