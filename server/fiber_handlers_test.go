@@ -622,3 +622,366 @@ func TestFiberHandlerChallenge_MergeACLsForSameIP(t *testing.T) {
 		assert.Equal(t, 200, res.StatusCode, "should authorize any host when AllowAll=true")
 	})
 }
+
+// -----------------------------------------------------------------------------
+// Max TTL Validation Tests
+// -----------------------------------------------------------------------------
+
+func TestFiberHandlerMaxTTL(t *testing.T) {
+	// Common test constants
+	const (
+		maxTTLConfigured   = 100
+		maxTTLUnlimited    = 0
+		testUserID         = "testuser3"
+		testUserUnlimited  = "testuser-unlimited"
+		testUserLarge      = "testuser-large"
+		testSecret         = "supersecret"
+		testDescription    = "Test User"
+		updatedDescription = "Updated User"
+	)
+
+	// Common endpoints
+	var (
+		userEndpoint    = "/api/v1/user"
+		userIDEndpoint  = "/api/v1/user/" + testUserID
+		aclBaseEndpoint = "/api/v1/acl/"
+	)
+
+	// Common error messages
+	var (
+		errTTLExceeded  = "TTL has exceeded max allowed value"
+		errTTLRequired  = "TTL is required and cannot be"
+		errTTLUnlimited = "TTL is required and cannot be unlimited"
+	)
+
+	// Helper to create user request body
+	createUserBody := func(id string, ttl int) addUser {
+		return addUser{
+			ID:          id,
+			Enabled:     true,
+			Description: testDescription,
+			Secret:      testSecret,
+			TTLMinutes:  ttl,
+		}
+	}
+
+	// Helper to create ACL request body with TTL
+	createACLBody := func(minutesFromNow int) addACL {
+		futureTime := time.Now().Add(time.Duration(minutesFromNow) * time.Minute).Format(time.RFC3339)
+		return addACL{
+			AllowAll:     true,
+			AllowedHosts: []string{},
+			TTL:          &futureTime,
+		}
+	}
+
+	tests := []struct {
+		name              string
+		maxTTL            int
+		method            string
+		endpoint          string
+		requestBody       any
+		expectedStatus    int
+		expectedErrorMsg  string
+		validateResponse  func(*testing.T, []byte)
+		setupPrerequisite func(*testing.T, interface {
+			Test(*http.Request, ...int) (*http.Response, error)
+		})
+	}{
+		// User tests with max TTL = 100
+		{
+			name:             "Add user with TTL exceeding max",
+			maxTTL:           maxTTLConfigured,
+			method:           "POST",
+			endpoint:         userEndpoint,
+			requestBody:      createUserBody("testuser1", 200),
+			expectedStatus:   400,
+			expectedErrorMsg: errTTLExceeded,
+		},
+		{
+			name:             "Add user with TTL = 0 when max is configured",
+			maxTTL:           maxTTLConfigured,
+			method:           "POST",
+			endpoint:         userEndpoint,
+			requestBody:      createUserBody("testuser2", 0),
+			expectedStatus:   400,
+			expectedErrorMsg: errTTLRequired,
+		},
+		{
+			name:           "Add user with valid TTL when max is configured",
+			maxTTL:         maxTTLConfigured,
+			method:         "POST",
+			endpoint:       userEndpoint,
+			requestBody:    createUserBody(testUserID, 50),
+			expectedStatus: 201,
+			validateResponse: func(t *testing.T, body []byte) {
+				var user getUser
+				err := json.Unmarshal(body, &user)
+				require.NoError(t, err)
+				assert.Equal(t, testUserID, user.ID)
+				assert.Equal(t, 50, user.TTLMinutes)
+			},
+		},
+		{
+			name:     "Update user with TTL exceeding max",
+			maxTTL:   maxTTLConfigured,
+			method:   "PUT",
+			endpoint: userIDEndpoint,
+			requestBody: modifyUser{
+				Enabled:     true,
+				Description: updatedDescription,
+				TTLMinutes:  150,
+			},
+			expectedStatus:   400,
+			expectedErrorMsg: errTTLExceeded,
+			setupPrerequisite: func(t *testing.T, app interface {
+				Test(*http.Request, ...int) (*http.Response, error)
+			}) {
+				reqBody := createUserBody(testUserID, 50)
+				createBytes, _ := json.Marshal(reqBody)
+				req, _ := http.NewRequestWithContext(t.Context(), "POST", userEndpoint, bytes.NewReader(createBytes))
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("Admin-Secret", "test-admin-secret")
+				res, _ := app.Test(req, -1)
+				res.Body.Close()
+			},
+		},
+		{
+			name:     "Update user with valid TTL",
+			maxTTL:   maxTTLConfigured,
+			method:   "PUT",
+			endpoint: userIDEndpoint,
+			requestBody: modifyUser{
+				Enabled:     true,
+				Description: updatedDescription,
+				TTLMinutes:  75,
+			},
+			expectedStatus: 200,
+			validateResponse: func(t *testing.T, body []byte) {
+				var user getUser
+				err := json.Unmarshal(body, &user)
+				require.NoError(t, err)
+				assert.Equal(t, 75, user.TTLMinutes)
+			},
+			setupPrerequisite: func(t *testing.T, app interface {
+				Test(*http.Request, ...int) (*http.Response, error)
+			}) {
+				reqBody := createUserBody(testUserID, 50)
+				createBytes, _ := json.Marshal(reqBody)
+				req, _ := http.NewRequestWithContext(t.Context(), "POST", userEndpoint, bytes.NewReader(createBytes))
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("Admin-Secret", "test-admin-secret")
+				res, _ := app.Test(req, -1)
+				res.Body.Close()
+			},
+		},
+		// ACL tests with max TTL = 100
+		{
+			name:     "Add ACL without TTL when max is configured",
+			maxTTL:   maxTTLConfigured,
+			method:   "POST",
+			endpoint: aclBaseEndpoint + "192.168.50.100",
+			requestBody: addACL{
+				AllowAll:     true,
+				AllowedHosts: []string{},
+			},
+			expectedStatus:   400,
+			expectedErrorMsg: errTTLUnlimited,
+		},
+		{
+			name:             "Add ACL with TTL exceeding max",
+			maxTTL:           maxTTLConfigured,
+			method:           "POST",
+			endpoint:         aclBaseEndpoint + "192.168.50.200",
+			requestBody:      createACLBody(200),
+			expectedStatus:   400,
+			expectedErrorMsg: errTTLExceeded,
+		},
+		{
+			name:           "Add ACL with valid TTL when max is configured",
+			maxTTL:         maxTTLConfigured,
+			method:         "POST",
+			endpoint:       aclBaseEndpoint + "192.168.50.150",
+			requestBody:    createACLBody(50),
+			expectedStatus: 201,
+			validateResponse: func(t *testing.T, body []byte) {
+				var acl getACL
+				err := json.Unmarshal(body, &acl)
+				require.NoError(t, err)
+				assert.NotNil(t, acl.TTL)
+			},
+		},
+		{
+			name:     "Update ACL without TTL when max is configured",
+			maxTTL:   maxTTLConfigured,
+			method:   "PUT",
+			endpoint: aclBaseEndpoint + "192.168.50.151",
+			requestBody: modifyACL{
+				AllowAll:     false,
+				AllowedHosts: []string{"example.com"},
+			},
+			expectedStatus:   400,
+			expectedErrorMsg: errTTLUnlimited,
+			setupPrerequisite: func(t *testing.T, app interface {
+				Test(*http.Request, ...int) (*http.Response, error)
+			}) {
+				reqBody := createACLBody(50)
+				createBytes, _ := json.Marshal(reqBody)
+				req, _ := http.NewRequestWithContext(t.Context(), "POST", aclBaseEndpoint+"192.168.50.151", bytes.NewReader(createBytes))
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("Admin-Secret", "test-admin-secret")
+				res, _ := app.Test(req, -1)
+				res.Body.Close()
+			},
+		},
+		{
+			name:     "Update ACL with TTL exceeding max",
+			maxTTL:   maxTTLConfigured,
+			method:   "PUT",
+			endpoint: aclBaseEndpoint + "192.168.50.152",
+			requestBody: func() modifyACL {
+				futureTime := time.Now().Add(180 * time.Minute).Format(time.RFC3339)
+				return modifyACL{
+					AllowAll:     false,
+					AllowedHosts: []string{"example.com"},
+					TTL:          &futureTime,
+				}
+			}(),
+			expectedStatus:   400,
+			expectedErrorMsg: errTTLExceeded,
+			setupPrerequisite: func(t *testing.T, app interface {
+				Test(*http.Request, ...int) (*http.Response, error)
+			}) {
+				reqBody := createACLBody(50)
+				createBytes, _ := json.Marshal(reqBody)
+				req, _ := http.NewRequestWithContext(t.Context(), "POST", aclBaseEndpoint+"192.168.50.152", bytes.NewReader(createBytes))
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("Admin-Secret", "test-admin-secret")
+				res, _ := app.Test(req, -1)
+				res.Body.Close()
+			},
+		},
+		{
+			name:     "Update ACL with valid TTL",
+			maxTTL:   maxTTLConfigured,
+			method:   "PUT",
+			endpoint: aclBaseEndpoint + "192.168.50.153",
+			requestBody: func() modifyACL {
+				futureTime := time.Now().Add(80 * time.Minute).Format(time.RFC3339)
+				return modifyACL{
+					AllowAll:     false,
+					AllowedHosts: []string{"example.com"},
+					TTL:          &futureTime,
+				}
+			}(),
+			expectedStatus: 200,
+			validateResponse: func(t *testing.T, body []byte) {
+				var acl getACL
+				err := json.Unmarshal(body, &acl)
+				require.NoError(t, err)
+				assert.NotNil(t, acl.TTL)
+			},
+			setupPrerequisite: func(t *testing.T, app interface {
+				Test(*http.Request, ...int) (*http.Response, error)
+			}) {
+				reqBody := createACLBody(50)
+				createBytes, _ := json.Marshal(reqBody)
+				req, _ := http.NewRequestWithContext(t.Context(), "POST", aclBaseEndpoint+"192.168.50.153", bytes.NewReader(createBytes))
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("Admin-Secret", "test-admin-secret")
+				res, _ := app.Test(req, -1)
+				res.Body.Close()
+			},
+		},
+		// Tests with max TTL = 0 (unlimited allowed)
+		{
+			name:           "Add user with TTL = 0 when unlimited is allowed",
+			maxTTL:         maxTTLUnlimited,
+			method:         "POST",
+			endpoint:       userEndpoint,
+			requestBody:    createUserBody(testUserUnlimited, 0),
+			expectedStatus: 201,
+			validateResponse: func(t *testing.T, body []byte) {
+				var user getUser
+				err := json.Unmarshal(body, &user)
+				require.NoError(t, err)
+				assert.Equal(t, testUserUnlimited, user.ID)
+				assert.Equal(t, 0, user.TTLMinutes)
+			},
+		},
+		{
+			name:     "Add ACL without TTL when unlimited is allowed",
+			maxTTL:   maxTTLUnlimited,
+			method:   "POST",
+			endpoint: aclBaseEndpoint + "192.168.60.100",
+			requestBody: addACL{
+				AllowAll:     true,
+				AllowedHosts: []string{},
+			},
+			expectedStatus: 201,
+			validateResponse: func(t *testing.T, body []byte) {
+				var acl getACL
+				err := json.Unmarshal(body, &acl)
+				require.NoError(t, err)
+				assert.Nil(t, acl.TTL)
+			},
+		},
+		{
+			name:           "Add user with very large TTL when unlimited is allowed",
+			maxTTL:         maxTTLUnlimited,
+			method:         "POST",
+			endpoint:       userEndpoint,
+			requestBody:    createUserBody(testUserLarge, 999999),
+			expectedStatus: 201,
+			validateResponse: func(t *testing.T, body []byte) {
+				var user getUser
+				err := json.Unmarshal(body, &user)
+				require.NoError(t, err)
+				assert.Equal(t, testUserLarge, user.ID)
+				assert.Equal(t, 999999, user.TTLMinutes)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			app := setupTestFiberApp(t) //nolint:bodyclose // False positive: setupTestFiberApp doesn't return response
+			viper.Set("ttl.max", tt.maxTTL)
+
+			// Run setup if needed
+			if tt.setupPrerequisite != nil {
+				tt.setupPrerequisite(t, app)
+			}
+
+			// Create request
+			reqBytes, _ := json.Marshal(tt.requestBody)
+			req, _ := http.NewRequestWithContext(t.Context(), tt.method, tt.endpoint, bytes.NewReader(reqBytes))
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Admin-Secret", "test-admin-secret")
+
+			// Execute request
+			res, err := app.Test(req, -1)
+			require.NoError(t, err)
+			defer res.Body.Close()
+
+			// Validate status code
+			assert.Equal(t, tt.expectedStatus, res.StatusCode)
+
+			// Read response body
+			body, _ := io.ReadAll(res.Body)
+
+			// Validate error message if expected
+			if tt.expectedErrorMsg != "" {
+				var errResp errorResponse
+				err = json.Unmarshal(body, &errResp)
+				require.NoError(t, err)
+				assert.Contains(t, errResp.Error, tt.expectedErrorMsg)
+			}
+
+			// Custom validation if provided
+			if tt.validateResponse != nil {
+				tt.validateResponse(t, body)
+			}
+		})
+	}
+}

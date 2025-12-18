@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -26,6 +27,41 @@ const (
 // @Router /version [get]
 func fiberHandlerVersion(c *fiber.Ctx) error {
 	return c.JSON(version{meta.Version, meta.CommitSHA})
+}
+
+// fiberHandlerConfig godoc
+// @Summary Configuration dump
+// @Description Returns the current server configuration in JSON format
+// @Tags Information
+// @Produce  json
+// @Param Admin-Secret header string true "Admin secret for authentication"
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} errorResponse
+// @Router /config [get]
+func fiberHandlerConfig(c *fiber.Ctx) error {
+	// Check admin secret
+	if !checkAdminSecret(c.Get("Admin-Secret")) {
+		return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"unauthorized"})
+	}
+
+	// Return non-sensitive relevant configuration only
+	config := &fiber.Map{
+		"log": &fiber.Map{
+			"level": viper.GetString("log.level"),
+		},
+		"server": &fiber.Map{
+			"bind_address": viper.GetString("server.bind_address"),
+			"bind_port":    viper.GetString("server.bind_port"),
+		},
+		"db": &fiber.Map{
+			"provider": viper.GetString("db.provider"),
+		},
+		"ttl": &fiber.Map{
+			"max": viper.GetString("ttl.max"),
+		},
+	}
+
+	return c.Status(200).JSON(config)
 }
 
 // fiberHandlerAuthorize godoc
@@ -217,12 +253,16 @@ func fiberHandlerUserAdd(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{err.Error()})
 	}
 
-	// Validate TTL: never 0 (unlimited not allowed), max 3 months (129600 minutes)
-	if req.TTLMinutes == 0 {
-		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"TTL is required and cannot be 0 (unlimited is not allowed)"})
-	}
-	if req.TTLMinutes > 129600 {
-		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"TTL cannot exceed 3 months (129600 minutes)"})
+	// Validate TTL against configured maximum
+	maxTTL := viper.GetInt("ttl.max")
+	if maxTTL > 0 {
+		// Max TTL is configured (not unlimited)
+		if req.TTLMinutes == 0 {
+			return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"TTL is required and cannot be 0 (unlimited is not allowed)"})
+		}
+		if req.TTLMinutes > maxTTL {
+			return c.Status(fiber.StatusBadRequest).JSON(errorResponse{fmt.Sprintf("TTL has exceeded max allowed value of %d minutes", maxTTL)})
+		}
 	}
 
 	// Create user with admin-defined ID
@@ -290,12 +330,16 @@ func fiberHandlerUserUpdate(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(errorResponse{"user not found"})
 	}
 
-	// Validate TTL: never 0 (unlimited not allowed), max 3 months (129600 minutes)
-	if req.TTLMinutes == 0 {
-		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"TTL is required and cannot be 0 (unlimited is not allowed)"})
-	}
-	if req.TTLMinutes > 129600 {
-		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"TTL cannot exceed 3 months (129600 minutes)"})
+	// Validate TTL against configured maximum
+	maxTTL := viper.GetInt("ttl.max")
+	if maxTTL > 0 {
+		// Max TTL is configured (not unlimited)
+		if req.TTLMinutes == 0 {
+			return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"TTL is required and cannot be 0 (unlimited is not allowed)"})
+		}
+		if req.TTLMinutes > maxTTL {
+			return c.Status(fiber.StatusBadRequest).JSON(errorResponse{fmt.Sprintf("TTL has exceeded max allowed value of %d minutes", maxTTL)})
+		}
 	}
 
 	// Update user properties
@@ -453,12 +497,31 @@ func fiberHandlerACLAdd(c *fiber.Ctx) error {
 		UserIDs:      req.UserIDs,
 	}
 
+	// Validate TTL against configured maximum
+	maxTTL := viper.GetInt("ttl.max")
+	if maxTTL > 0 {
+		// Max TTL is configured (not unlimited)
+		if req.TTL == nil || *req.TTL == "" {
+			return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"TTL is required and cannot be unlimited"})
+		}
+	}
+
 	// Parse TTL if provided
 	if req.TTL != nil && *req.TTL != "" {
 		ttl, err := time.Parse(time.RFC3339, *req.TTL)
 		if err != nil {
 			return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"invalid TTL format, use RFC3339"})
 		}
+
+		// Validate TTL does not exceed maximum
+		if maxTTL > 0 {
+			// Calculate duration from now to the provided TTL
+			durationMinutes := int(time.Until(ttl).Minutes())
+			if durationMinutes > maxTTL {
+				return c.Status(fiber.StatusBadRequest).JSON(errorResponse{fmt.Sprintf("TTL has exceeded max allowed value of %d minutes", maxTTL)})
+			}
+		}
+
 		acl.TTL = &ttl
 	}
 
@@ -513,12 +576,31 @@ func fiberHandlerACLUpdate(c *fiber.Ctx) error {
 	existingACL.AllowedHosts = req.AllowedHosts
 	existingACL.UserIDs = req.UserIDs
 
+	// Validate TTL against configured maximum
+	maxTTL := viper.GetInt("ttl.max")
+	if maxTTL > 0 {
+		// Max TTL is configured (not unlimited)
+		if req.TTL == nil || *req.TTL == "" {
+			return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"TTL is required and cannot be unlimited"})
+		}
+	}
+
 	// Parse TTL if provided
 	if req.TTL != nil && *req.TTL != "" {
 		ttl, err := time.Parse(time.RFC3339, *req.TTL)
 		if err != nil {
 			return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"invalid TTL format, use RFC3339"})
 		}
+
+		// Validate TTL does not exceed maximum
+		if maxTTL > 0 {
+			// Calculate duration from now to the provided TTL
+			durationMinutes := int(time.Until(ttl).Minutes())
+			if durationMinutes > maxTTL {
+				return c.Status(fiber.StatusBadRequest).JSON(errorResponse{fmt.Sprintf("TTL has exceeded max allowed value of %d minutes", maxTTL)})
+			}
+		}
+
 		existingACL.TTL = &ttl
 	} else {
 		existingACL.TTL = nil

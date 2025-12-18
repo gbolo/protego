@@ -7,6 +7,13 @@ db:
     # path to database file
     file: ./testdata/db/protego.db
 
+# ttl options
+ttl:
+
+  # maximum TTL in minutes that an individual ACL can have.
+  # NOTE: a value of 0 means unlimited (ACLs can be made to never expire! use with caution)
+  max: 129600 # 90 days
+
 # options for admin
 admin:
   secret: supersecret

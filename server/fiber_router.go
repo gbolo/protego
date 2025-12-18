@@ -20,6 +20,9 @@ func setupFiberRoutes(app *fiber.App) {
 	// Version endpoint
 	apiV1.Get("/version", fiberHandlerVersion)
 
+	// Config endpoint
+	apiV1.Get("/config", fiberHandlerConfig)
+
 	// Authorization endpoint
 	apiV1.Get("/authorize", fiberHandlerAuthorize)
 

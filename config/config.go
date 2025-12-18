@@ -87,6 +87,13 @@ func printConfigSummary() {
 
 // checks that the config is correctly defined
 func sanityChecks() {
-
-	// check stuff here
+	maxTTl := viper.GetInt("ttl.max")
+	switch {
+	case maxTTl < 0:
+		log.Fatal("ttl.max must be greater or equal to 0")
+	case maxTTl == 0:
+		log.Warning("ttl.max is set to 0 which allows for unlimited TTLs!")
+	case maxTTl > 60*24*90:
+		log.Warning("ttl.max is set to a value longer than 90 days: %d mins", maxTTl)
+	}
 }
