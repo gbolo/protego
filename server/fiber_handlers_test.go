@@ -985,3 +985,511 @@ func TestFiberHandlerMaxTTL(t *testing.T) {
 		})
 	}
 }
+
+// -----------------------------------------------------------------------------
+// User Disable ACL Cleanup Tests
+// -----------------------------------------------------------------------------
+
+func TestFiberHandlerUserDisable_RemovesACLs(t *testing.T) {
+	app := setupTestFiberApp(t) //nolint:bodyclose // False positive: setupTestFiberApp doesn't return response
+
+	const (
+		testUserID   = "testuser-disable"
+		otherUserID  = "otheruser"
+		testSecret   = "supersecret"
+		ipOnlyUser   = "10.0.0.1"
+		ipSharedUser = "10.0.0.2"
+	)
+
+	// Create test user
+	t.Run("Create user", func(t *testing.T) {
+		reqBody := addUser{
+			ID:          testUserID,
+			Enabled:     true,
+			Description: "Test User",
+			Secret:      testSecret,
+			TTLMinutes:  60,
+		}
+		createBytes, _ := json.Marshal(reqBody)
+		req, _ := http.NewRequestWithContext(t.Context(), "POST", "/api/v1/user", bytes.NewReader(createBytes))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Admin-Secret", "test-admin-secret")
+
+		res, err := app.Test(req, -1)
+		require.NoError(t, err)
+		defer res.Body.Close()
+		assert.Equal(t, 201, res.StatusCode)
+	})
+
+	// Create other user
+	t.Run("Create other user", func(t *testing.T) {
+		reqBody := addUser{
+			ID:          otherUserID,
+			Enabled:     true,
+			Description: "Other User",
+			Secret:      testSecret,
+			TTLMinutes:  60,
+		}
+		createBytes, _ := json.Marshal(reqBody)
+		req, _ := http.NewRequestWithContext(t.Context(), "POST", "/api/v1/user", bytes.NewReader(createBytes))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Admin-Secret", "test-admin-secret")
+
+		res, err := app.Test(req, -1)
+		require.NoError(t, err)
+		defer res.Body.Close()
+		assert.Equal(t, 201, res.StatusCode)
+	})
+
+	// Create ACL with only testUser
+	t.Run("Create ACL with only test user", func(t *testing.T) {
+		ttl := time.Now().Add(1 * time.Hour).Format(time.RFC3339)
+		reqBody := addACL{
+			AllowAll:     false,
+			AllowedHosts: []string{"example.com"},
+			UserIDs:      []string{testUserID},
+			TTL:          &ttl,
+		}
+		createBytes, _ := json.Marshal(reqBody)
+		req, _ := http.NewRequestWithContext(t.Context(), "POST", "/api/v1/acl/"+ipOnlyUser, bytes.NewReader(createBytes))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Admin-Secret", "test-admin-secret")
+
+		res, err := app.Test(req, -1)
+		require.NoError(t, err)
+		defer res.Body.Close()
+		assert.Equal(t, 201, res.StatusCode)
+	})
+
+	// Create ACL with both users
+	t.Run("Create ACL with both users", func(t *testing.T) {
+		ttl := time.Now().Add(1 * time.Hour).Format(time.RFC3339)
+		reqBody := addACL{
+			AllowAll:     false,
+			AllowedHosts: []string{"example.com"},
+			UserIDs:      []string{testUserID, otherUserID},
+			TTL:          &ttl,
+		}
+		createBytes, _ := json.Marshal(reqBody)
+		req, _ := http.NewRequestWithContext(t.Context(), "POST", "/api/v1/acl/"+ipSharedUser, bytes.NewReader(createBytes))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Admin-Secret", "test-admin-secret")
+
+		res, err := app.Test(req, -1)
+		require.NoError(t, err)
+		defer res.Body.Close()
+		assert.Equal(t, 201, res.StatusCode)
+	})
+
+	// Verify ACLs exist before disabling user
+	t.Run("Verify ACLs exist before disable", func(t *testing.T) {
+		// Check ACL with only test user
+		req, _ := http.NewRequestWithContext(t.Context(), "GET", "/api/v1/acl/"+ipOnlyUser, http.NoBody)
+		req.Header.Set("Admin-Secret", "test-admin-secret")
+		res, err := app.Test(req, -1)
+		require.NoError(t, err)
+		defer res.Body.Close()
+		assert.Equal(t, 200, res.StatusCode)
+
+		// Check ACL with both users
+		req2, _ := http.NewRequestWithContext(t.Context(), "GET", "/api/v1/acl/"+ipSharedUser, http.NoBody)
+		req2.Header.Set("Admin-Secret", "test-admin-secret")
+		res2, err := app.Test(req2, -1)
+		require.NoError(t, err)
+		defer res2.Body.Close()
+		assert.Equal(t, 200, res2.StatusCode)
+	})
+
+	// Disable the user
+	t.Run("Disable user", func(t *testing.T) {
+		reqBody := modifyUser{
+			Enabled:     false,
+			Description: "Disabled User",
+			TTLMinutes:  60,
+		}
+		updateBytes, _ := json.Marshal(reqBody)
+		req, _ := http.NewRequestWithContext(t.Context(), "PUT", "/api/v1/user/"+testUserID, bytes.NewReader(updateBytes))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Admin-Secret", "test-admin-secret")
+
+		res, err := app.Test(req, -1)
+		require.NoError(t, err)
+		defer res.Body.Close()
+		assert.Equal(t, 200, res.StatusCode)
+	})
+
+	// Verify ACL with only test user is removed
+	t.Run("Verify ACL with only user is removed", func(t *testing.T) {
+		req, _ := http.NewRequestWithContext(t.Context(), "GET", "/api/v1/acl/"+ipOnlyUser, http.NoBody)
+		req.Header.Set("Admin-Secret", "test-admin-secret")
+
+		res, err := app.Test(req, -1)
+		require.NoError(t, err)
+		defer res.Body.Close()
+		assert.Equal(t, 404, res.StatusCode, "ACL with only disabled user should be removed")
+	})
+
+	// Verify ACL with both users still exists but without test user
+	t.Run("Verify shared ACL exists without disabled user", func(t *testing.T) {
+		req, _ := http.NewRequestWithContext(t.Context(), "GET", "/api/v1/acl/"+ipSharedUser, http.NoBody)
+		req.Header.Set("Admin-Secret", "test-admin-secret")
+
+		res, err := app.Test(req, -1)
+		require.NoError(t, err)
+		defer res.Body.Close()
+		assert.Equal(t, 200, res.StatusCode, "Shared ACL should still exist")
+
+		body, _ := io.ReadAll(res.Body)
+		var acl getACL
+		err = json.Unmarshal(body, &acl)
+		require.NoError(t, err)
+
+		// Verify disabled user is not in the ACL
+		assert.NotContains(t, acl.UserIDs, testUserID, "Disabled user should be removed from shared ACL")
+		// Verify other user is still in the ACL
+		assert.Contains(t, acl.UserIDs, otherUserID, "Other user should remain in shared ACL")
+		assert.Len(t, acl.UserIDs, 1, "ACL should have exactly one user remaining")
+	})
+}
+
+func TestFiberHandlerUserDisable_NoACLs(t *testing.T) {
+	app := setupTestFiberApp(t) //nolint:bodyclose // False positive: setupTestFiberApp doesn't return response
+
+	const (
+		testUserID = "testuser-no-acls"
+		testSecret = "supersecret"
+	)
+
+	// Create user
+	t.Run("Create user", func(t *testing.T) {
+		reqBody := addUser{
+			ID:          testUserID,
+			Enabled:     true,
+			Description: "Test User",
+			Secret:      testSecret,
+			TTLMinutes:  60,
+		}
+		createBytes, _ := json.Marshal(reqBody)
+		req, _ := http.NewRequestWithContext(t.Context(), "POST", "/api/v1/user", bytes.NewReader(createBytes))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Admin-Secret", "test-admin-secret")
+
+		res, err := app.Test(req, -1)
+		require.NoError(t, err)
+		defer res.Body.Close()
+		assert.Equal(t, 201, res.StatusCode)
+	})
+
+	// Disable user without any ACLs - should succeed without errors
+	t.Run("Disable user with no ACLs", func(t *testing.T) {
+		reqBody := modifyUser{
+			Enabled:     false,
+			Description: "Disabled User",
+			TTLMinutes:  60,
+		}
+		updateBytes, _ := json.Marshal(reqBody)
+		req, _ := http.NewRequestWithContext(t.Context(), "PUT", "/api/v1/user/"+testUserID, bytes.NewReader(updateBytes))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Admin-Secret", "test-admin-secret")
+
+		res, err := app.Test(req, -1)
+		require.NoError(t, err)
+		defer res.Body.Close()
+		assert.Equal(t, 200, res.StatusCode)
+
+		body, _ := io.ReadAll(res.Body)
+		var user getUser
+		err = json.Unmarshal(body, &user)
+		require.NoError(t, err)
+		assert.False(t, user.Enabled)
+	})
+}
+
+func TestFiberHandlerUserDisable_AlreadyDisabled(t *testing.T) {
+	app := setupTestFiberApp(t) //nolint:bodyclose // False positive: setupTestFiberApp doesn't return response
+
+	const (
+		testUserID = "testuser-already-disabled"
+		testSecret = "supersecret"
+		testIP     = "10.0.0.10"
+	)
+
+	// Create disabled user
+	t.Run("Create disabled user", func(t *testing.T) {
+		reqBody := addUser{
+			ID:          testUserID,
+			Enabled:     false,
+			Description: "Test User",
+			Secret:      testSecret,
+			TTLMinutes:  60,
+		}
+		createBytes, _ := json.Marshal(reqBody)
+		req, _ := http.NewRequestWithContext(t.Context(), "POST", "/api/v1/user", bytes.NewReader(createBytes))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Admin-Secret", "test-admin-secret")
+
+		res, err := app.Test(req, -1)
+		require.NoError(t, err)
+		defer res.Body.Close()
+		assert.Equal(t, 201, res.StatusCode)
+	})
+
+	// Create ACL with disabled user
+	t.Run("Create ACL", func(t *testing.T) {
+		ttl := time.Now().Add(1 * time.Hour).Format(time.RFC3339)
+		reqBody := addACL{
+			AllowAll:     false,
+			AllowedHosts: []string{"example.com"},
+			UserIDs:      []string{testUserID},
+			TTL:          &ttl,
+		}
+		createBytes, _ := json.Marshal(reqBody)
+		req, _ := http.NewRequestWithContext(t.Context(), "POST", "/api/v1/acl/"+testIP, bytes.NewReader(createBytes))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Admin-Secret", "test-admin-secret")
+
+		res, err := app.Test(req, -1)
+		require.NoError(t, err)
+		defer res.Body.Close()
+		assert.Equal(t, 201, res.StatusCode)
+	})
+
+	// Update user (still disabled) - ACL should NOT be removed since user wasn't being disabled
+	t.Run("Update disabled user", func(t *testing.T) {
+		reqBody := modifyUser{
+			Enabled:     false,
+			Description: "Still Disabled User",
+			TTLMinutes:  90,
+		}
+		updateBytes, _ := json.Marshal(reqBody)
+		req, _ := http.NewRequestWithContext(t.Context(), "PUT", "/api/v1/user/"+testUserID, bytes.NewReader(updateBytes))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Admin-Secret", "test-admin-secret")
+
+		res, err := app.Test(req, -1)
+		require.NoError(t, err)
+		defer res.Body.Close()
+		assert.Equal(t, 200, res.StatusCode)
+	})
+
+	// ACL should still exist since user was already disabled
+	t.Run("Verify ACL still exists", func(t *testing.T) {
+		req, _ := http.NewRequestWithContext(t.Context(), "GET", "/api/v1/acl/"+testIP, http.NoBody)
+		req.Header.Set("Admin-Secret", "test-admin-secret")
+
+		res, err := app.Test(req, -1)
+		require.NoError(t, err)
+		defer res.Body.Close()
+		assert.Equal(t, 200, res.StatusCode, "ACL should still exist when updating already-disabled user")
+	})
+}
+
+// -----------------------------------------------------------------------------
+// User Delete ACL Cleanup Tests
+// -----------------------------------------------------------------------------
+
+func TestFiberHandlerUserDelete_RemovesACLs(t *testing.T) {
+	app := setupTestFiberApp(t) //nolint:bodyclose // False positive: setupTestFiberApp doesn't return response
+
+	const (
+		testUserID   = "testuser-delete"
+		otherUserID  = "otheruser-delete"
+		testSecret   = "supersecret"
+		ipOnlyUser   = "10.0.0.11"
+		ipSharedUser = "10.0.0.12"
+	)
+
+	// Create test user
+	t.Run("Create user", func(t *testing.T) {
+		reqBody := addUser{
+			ID:          testUserID,
+			Enabled:     true,
+			Description: "Test User",
+			Secret:      testSecret,
+			TTLMinutes:  60,
+		}
+		createBytes, _ := json.Marshal(reqBody)
+		req, _ := http.NewRequestWithContext(t.Context(), "POST", "/api/v1/user", bytes.NewReader(createBytes))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Admin-Secret", "test-admin-secret")
+
+		res, err := app.Test(req, -1)
+		require.NoError(t, err)
+		defer res.Body.Close()
+		assert.Equal(t, 201, res.StatusCode)
+	})
+
+	// Create other user
+	t.Run("Create other user", func(t *testing.T) {
+		reqBody := addUser{
+			ID:          otherUserID,
+			Enabled:     true,
+			Description: "Other User",
+			Secret:      testSecret,
+			TTLMinutes:  60,
+		}
+		createBytes, _ := json.Marshal(reqBody)
+		req, _ := http.NewRequestWithContext(t.Context(), "POST", "/api/v1/user", bytes.NewReader(createBytes))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Admin-Secret", "test-admin-secret")
+
+		res, err := app.Test(req, -1)
+		require.NoError(t, err)
+		defer res.Body.Close()
+		assert.Equal(t, 201, res.StatusCode)
+	})
+
+	// Create ACL with only testUser
+	t.Run("Create ACL with only test user", func(t *testing.T) {
+		ttl := time.Now().Add(1 * time.Hour).Format(time.RFC3339)
+		reqBody := addACL{
+			AllowAll:     false,
+			AllowedHosts: []string{"example.com"},
+			UserIDs:      []string{testUserID},
+			TTL:          &ttl,
+		}
+		createBytes, _ := json.Marshal(reqBody)
+		req, _ := http.NewRequestWithContext(t.Context(), "POST", "/api/v1/acl/"+ipOnlyUser, bytes.NewReader(createBytes))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Admin-Secret", "test-admin-secret")
+
+		res, err := app.Test(req, -1)
+		require.NoError(t, err)
+		defer res.Body.Close()
+		assert.Equal(t, 201, res.StatusCode)
+	})
+
+	// Create ACL with both users
+	t.Run("Create ACL with both users", func(t *testing.T) {
+		ttl := time.Now().Add(1 * time.Hour).Format(time.RFC3339)
+		reqBody := addACL{
+			AllowAll:     false,
+			AllowedHosts: []string{"example.com"},
+			UserIDs:      []string{testUserID, otherUserID},
+			TTL:          &ttl,
+		}
+		createBytes, _ := json.Marshal(reqBody)
+		req, _ := http.NewRequestWithContext(t.Context(), "POST", "/api/v1/acl/"+ipSharedUser, bytes.NewReader(createBytes))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Admin-Secret", "test-admin-secret")
+
+		res, err := app.Test(req, -1)
+		require.NoError(t, err)
+		defer res.Body.Close()
+		assert.Equal(t, 201, res.StatusCode)
+	})
+
+	// Verify ACLs exist before deleting user
+	t.Run("Verify ACLs exist before delete", func(t *testing.T) {
+		// Check ACL with only test user
+		req, _ := http.NewRequestWithContext(t.Context(), "GET", "/api/v1/acl/"+ipOnlyUser, http.NoBody)
+		req.Header.Set("Admin-Secret", "test-admin-secret")
+		res, err := app.Test(req, -1)
+		require.NoError(t, err)
+		defer res.Body.Close()
+		assert.Equal(t, 200, res.StatusCode)
+
+		// Check ACL with both users
+		req2, _ := http.NewRequestWithContext(t.Context(), "GET", "/api/v1/acl/"+ipSharedUser, http.NoBody)
+		req2.Header.Set("Admin-Secret", "test-admin-secret")
+		res2, err := app.Test(req2, -1)
+		require.NoError(t, err)
+		defer res2.Body.Close()
+		assert.Equal(t, 200, res2.StatusCode)
+	})
+
+	// Delete the user
+	t.Run("Delete user", func(t *testing.T) {
+		req, _ := http.NewRequestWithContext(t.Context(), "DELETE", "/api/v1/user/"+testUserID, http.NoBody)
+		req.Header.Set("Admin-Secret", "test-admin-secret")
+
+		res, err := app.Test(req, -1)
+		require.NoError(t, err)
+		defer res.Body.Close()
+		assert.Equal(t, 200, res.StatusCode)
+	})
+
+	// Verify ACL with only deleted user is removed
+	t.Run("Verify ACL with only user is removed", func(t *testing.T) {
+		req, _ := http.NewRequestWithContext(t.Context(), "GET", "/api/v1/acl/"+ipOnlyUser, http.NoBody)
+		req.Header.Set("Admin-Secret", "test-admin-secret")
+
+		res, err := app.Test(req, -1)
+		require.NoError(t, err)
+		defer res.Body.Close()
+		assert.Equal(t, 404, res.StatusCode, "ACL with only deleted user should be removed")
+	})
+
+	// Verify ACL with both users still exists but without deleted user
+	t.Run("Verify shared ACL exists without deleted user", func(t *testing.T) {
+		req, _ := http.NewRequestWithContext(t.Context(), "GET", "/api/v1/acl/"+ipSharedUser, http.NoBody)
+		req.Header.Set("Admin-Secret", "test-admin-secret")
+
+		res, err := app.Test(req, -1)
+		require.NoError(t, err)
+		defer res.Body.Close()
+		assert.Equal(t, 200, res.StatusCode, "Shared ACL should still exist")
+
+		body, _ := io.ReadAll(res.Body)
+		var acl getACL
+		err = json.Unmarshal(body, &acl)
+		require.NoError(t, err)
+
+		// Verify deleted user is not in the ACL
+		assert.NotContains(t, acl.UserIDs, testUserID, "Deleted user should be removed from shared ACL")
+		// Verify other user is still in the ACL
+		assert.Contains(t, acl.UserIDs, otherUserID, "Other user should remain in shared ACL")
+		assert.Len(t, acl.UserIDs, 1, "ACL should have exactly one user remaining")
+	})
+}
+
+func TestFiberHandlerUserDelete_NoACLs(t *testing.T) {
+	app := setupTestFiberApp(t) //nolint:bodyclose // False positive: setupTestFiberApp doesn't return response
+
+	const (
+		testUserID = "testuser-delete-no-acls"
+		testSecret = "supersecret"
+	)
+
+	// Create user
+	t.Run("Create user", func(t *testing.T) {
+		reqBody := addUser{
+			ID:          testUserID,
+			Enabled:     true,
+			Description: "Test User",
+			Secret:      testSecret,
+			TTLMinutes:  60,
+		}
+		createBytes, _ := json.Marshal(reqBody)
+		req, _ := http.NewRequestWithContext(t.Context(), "POST", "/api/v1/user", bytes.NewReader(createBytes))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Admin-Secret", "test-admin-secret")
+
+		res, err := app.Test(req, -1)
+		require.NoError(t, err)
+		defer res.Body.Close()
+		assert.Equal(t, 201, res.StatusCode)
+	})
+
+	// Delete user without any ACLs - should succeed without errors
+	t.Run("Delete user with no ACLs", func(t *testing.T) {
+		req, _ := http.NewRequestWithContext(t.Context(), "DELETE", "/api/v1/user/"+testUserID, http.NoBody)
+		req.Header.Set("Admin-Secret", "test-admin-secret")
+
+		res, err := app.Test(req, -1)
+		require.NoError(t, err)
+		defer res.Body.Close()
+		assert.Equal(t, 200, res.StatusCode)
+	})
+
+	// Verify user is actually deleted
+	t.Run("Verify user is deleted", func(t *testing.T) {
+		req, _ := http.NewRequestWithContext(t.Context(), "GET", "/api/v1/user/"+testUserID, http.NoBody)
+		req.Header.Set("Admin-Secret", "test-admin-secret")
+
+		res, err := app.Test(req, -1)
+		require.NoError(t, err)
+		defer res.Body.Close()
+		assert.Equal(t, 404, res.StatusCode, "Deleted user should not be found")
+	})
+}

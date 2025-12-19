@@ -330,6 +330,9 @@ func fiberHandlerUserUpdate(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(errorResponse{"user not found"})
 	}
 
+	// Track if user is being disabled
+	userBeingDisabled := existingUser.Enabled && !req.Enabled
+
 	// Validate TTL against configured maximum
 	maxTTL := viper.GetInt("ttl.max")
 	if maxTTL > 0 {
@@ -357,9 +360,20 @@ func fiberHandlerUserUpdate(c *fiber.Ctx) error {
 
 	log.Infof("user updated: %s", existingUser.ID)
 
-	// Notify DDNS provider to sync this user
-	if err := ddnsProvider.SyncUser(existingUser.ID); err != nil {
-		log.Warningf("failed to sync user %s to DDNS provider: %v", existingUser.ID, err)
+	// If user is being disabled, clean up their ACLs
+	if userBeingDisabled {
+		cleanupUserACLs(existingUser.ID)
+		// Also notify DDNS provider for users with DNS names
+		if len(existingUser.DNSNames) > 0 {
+			if err := ddnsProvider.SyncUser(existingUser.ID); err != nil {
+				log.Warningf("failed to sync user %s to DDNS provider: %v", existingUser.ID, err)
+			}
+		}
+	} else {
+		// Notify DDNS provider to sync this user (for DNS-based ACLs)
+		if err := ddnsProvider.SyncUser(existingUser.ID); err != nil {
+			log.Warningf("failed to sync user %s to DDNS provider: %v", existingUser.ID, err)
+		}
 	}
 
 	return c.JSON(getUserConvert(existingUser))
@@ -454,6 +468,9 @@ func fiberHandlerUserDelete(c *fiber.Ctx) error {
 
 	log.Infof("user deleted: %s", id)
 
+	// Clean up all ACLs associated with this user
+	cleanupUserACLs(user.ID)
+
 	// Notify DDNS provider to remove this user
 	ddnsProvider.RemoveUser(user.ID)
 
@@ -480,7 +497,8 @@ func fiberHandlerACLAdd(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"unauthorized"})
 	}
 
-	ip := c.Params("ip")
+	// IMPORTANT: Clone the IP string to avoid Fiber buffer reuse corruption
+	ip := strings.Clone(c.Params("ip"))
 	if !validate.IsIP(ip) {
 		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"invalid IP address"})
 	}
@@ -555,7 +573,8 @@ func fiberHandlerACLUpdate(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"unauthorized"})
 	}
 
-	ip := c.Params("ip")
+	// IMPORTANT: Clone the IP string to avoid Fiber buffer reuse corruption
+	ip := strings.Clone(c.Params("ip"))
 	if !validate.IsIP(ip) {
 		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"invalid IP address"})
 	}
@@ -633,7 +652,8 @@ func fiberHandlerACLGet(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"unauthorized"})
 	}
 
-	ip := c.Params("ip")
+	// IMPORTANT: Clone the IP string to avoid Fiber buffer reuse corruption
+	ip := strings.Clone(c.Params("ip"))
 	if !validate.IsIP(ip) {
 		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"invalid IP address"})
 	}
@@ -688,7 +708,8 @@ func fiberHandlerACLDelete(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"unauthorized"})
 	}
 
-	ip := c.Params("ip")
+	// IMPORTANT: Clone the IP string to avoid Fiber buffer reuse corruption
+	ip := strings.Clone(c.Params("ip"))
 	if !validate.IsIP(ip) {
 		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"invalid IP address"})
 	}
@@ -706,6 +727,72 @@ func fiberHandlerACLDelete(c *fiber.Ctx) error {
 
 	log.Infof("ACL deleted for IP: %s", ip)
 	return c.JSON(getACLConvert(ip, acl))
+}
+
+// cleanupUserACLs removes a user from all ACLs they belong to
+// If an ACL only has this user, the entire ACL is removed
+// If an ACL has multiple users, only this user's ID is removed
+func cleanupUserACLs(userID string) {
+	// Get all ACLs
+	allACLs, err := dataProvider.GetAllACLs()
+	if err != nil {
+		log.Errorf("failed to get ACLs during user %s cleanup: %v", userID, err)
+		return
+	}
+
+	removedCount := 0
+	updatedCount := 0
+
+	// Iterate through all ACLs
+	for ip, acl := range allACLs {
+		if acl == nil {
+			// the dataprovider should NEVER return a nil acl in the GetAllACLs method, so this is a bug
+			log.Errorf("The dataprovider returned a nil ACL for IP %s", ip)
+			continue
+		}
+
+		// Check if this ACL contains the user
+		if !acl.CheckUserId(userID) {
+			continue
+		}
+
+		// If this is the only user in the ACL, remove the entire ACL
+		if len(acl.UserIDs) == 1 {
+			if err := dataProvider.RemoveIp(ip); err != nil {
+				log.Errorf("failed to remove ACL for IP %s: %v", ip, err)
+			} else {
+				log.Infof("removed ACL for IP %s (user %s was the only user)", ip, userID)
+				removedCount++
+			}
+		} else {
+			// Multiple users, need to create a new ACL without this user
+			// Don't modify the existing ACL in place
+			newUserIDs := make([]string, 0, len(acl.UserIDs)-1)
+			for _, uid := range acl.UserIDs {
+				if uid != userID {
+					newUserIDs = append(newUserIDs, uid)
+				}
+			}
+
+			newACL := &dataprovider.ACL{
+				AllowAll:     acl.AllowAll,
+				AllowedHosts: acl.AllowedHosts,
+				UserIDs:      newUserIDs,
+				TTL:          acl.TTL,
+			}
+
+			if err := dataProvider.AddIp(ip, newACL); err != nil {
+				log.Errorf("failed to update ACL for IP %s: %v", ip, err)
+			} else {
+				log.Infof("removed user %s from ACL for IP %s (remaining users: %v)", userID, ip, newUserIDs)
+				updatedCount++
+			}
+		}
+	}
+
+	if removedCount > 0 || updatedCount > 0 {
+		log.Infof("cleaned up ACLs for user %s: %d removed, %d updated", userID, removedCount, updatedCount)
+	}
 }
 
 // checkAdminSecret verifies the admin secret
