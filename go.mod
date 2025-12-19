@@ -1,23 +1,59 @@
 module github.com/gbolo/protego
 
-go 1.13
+go 1.24.0
 
 require (
-	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751
-	github.com/asaskevich/govalidator v0.0.0-20200108200545-475eaeb16496
+	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2
 	github.com/boltdb/bolt v1.3.1
-	github.com/go-openapi/spec v0.19.7 // indirect
-	github.com/go-openapi/swag v0.19.8 // indirect
-	github.com/gorilla/handlers v1.4.2
-	github.com/gorilla/mux v1.7.4
-	github.com/mailru/easyjson v0.7.1 // indirect
+	github.com/gofiber/fiber/v2 v2.52.10
+	github.com/gofiber/swagger v1.1.1
 	github.com/op/go-logging v0.0.0-20160315200505-970db520ece7
-	github.com/prometheus/alertmanager v0.20.0 // indirect
-	github.com/spf13/viper v1.6.2
-	github.com/swaggo/http-swagger v0.0.0-20200308142732-58ac5e232fba
-	github.com/swaggo/swag v1.6.5
-	golang.org/x/crypto v0.0.0-20191011191535-87dc89f01550
-	golang.org/x/net v0.0.0-20200320220750-118fecf932d8 // indirect
-	golang.org/x/tools v0.0.0-20200320205904-2f9d11aa233c // indirect
-	gopkg.in/yaml.v2 v2.2.8 // indirect
+	github.com/spf13/viper v1.21.0
+	github.com/stretchr/testify v1.11.1
+	github.com/swaggo/swag v1.16.6
+	golang.org/x/crypto v0.46.0
+)
+
+require (
+	github.com/KyleBanks/depth v1.2.1 // indirect
+	github.com/andybalholm/brotli v1.1.0 // indirect
+	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/fsnotify/fsnotify v1.9.0 // indirect
+	github.com/go-openapi/jsonpointer v0.22.4 // indirect
+	github.com/go-openapi/jsonreference v0.21.4 // indirect
+	github.com/go-openapi/spec v0.22.2 // indirect
+	github.com/go-openapi/swag/conv v0.25.4 // indirect
+	github.com/go-openapi/swag/jsonname v0.25.4 // indirect
+	github.com/go-openapi/swag/jsonutils v0.25.4 // indirect
+	github.com/go-openapi/swag/loading v0.25.4 // indirect
+	github.com/go-openapi/swag/stringutils v0.25.4 // indirect
+	github.com/go-openapi/swag/typeutils v0.25.4 // indirect
+	github.com/go-openapi/swag/yamlutils v0.25.4 // indirect
+	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
+	github.com/google/uuid v1.6.0 // indirect
+	github.com/klauspost/compress v1.17.9 // indirect
+	github.com/mattn/go-colorable v0.1.13 // indirect
+	github.com/mattn/go-isatty v0.0.20 // indirect
+	github.com/mattn/go-runewidth v0.0.16 // indirect
+	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
+	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/rivo/uniseg v0.2.0 // indirect
+	github.com/sagikazarmark/locafero v0.12.0 // indirect
+	github.com/spf13/afero v1.15.0 // indirect
+	github.com/spf13/cast v1.10.0 // indirect
+	github.com/spf13/pflag v1.0.10 // indirect
+	github.com/subosito/gotenv v1.6.0 // indirect
+	github.com/swaggo/files/v2 v2.0.2 // indirect
+	github.com/valyala/bytebufferpool v1.0.0 // indirect
+	github.com/valyala/fasthttp v1.51.0 // indirect
+	github.com/valyala/tcplisten v1.0.0 // indirect
+	go.yaml.in/yaml/v3 v3.0.4 // indirect
+	golang.org/x/mod v0.31.0 // indirect
+	golang.org/x/sync v0.19.0 // indirect
+	golang.org/x/sys v0.39.0 // indirect
+	golang.org/x/text v0.32.0 // indirect
+	golang.org/x/tools v0.40.0 // indirect
+	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

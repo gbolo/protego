@@ -1,0 +1,6 @@
+# Binary output
+fakedata
+fakedata.exe
+
+# Go sum file
+go.sum

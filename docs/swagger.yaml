@@ -1,5 +1,31 @@
-basePath: /api/v1
 definitions:
+  server.addACL:
+    properties:
+      allow_all:
+        description: when true, client is allowed to access everything
+        example: false
+        type: boolean
+      allowed_hosts:
+        description: represents a list of host headers the client is allowed to access
+        example:
+        - git.example.com
+        - wiki.example.com
+        items:
+          type: string
+        type: array
+      ttl:
+        description: after this date, the ACL is no longer valid (RFC3339 format)
+        example: "2025-12-31T23:59:59Z"
+        type: string
+      user_ids:
+        description: Users associated with this ACL
+        example:
+        - 5e8848
+        - a3f129
+        items:
+          type: string
+        type: array
+    type: object
   server.addUser:
     properties:
       acl_allow_all:
@@ -30,6 +56,10 @@ definitions:
         description: Determines if this User is enabled
         example: true
         type: boolean
+      id:
+        description: A unique identifier for this User (4-64 characters)
+        example: cloud
+        type: string
       secret:
         description: This secret is used as a challenge to whitelist a User's IP
         example: supersecret
@@ -39,6 +69,42 @@ definitions:
           for after a successful challenge
         example: 60
         type: integer
+    type: object
+  server.errorResponse:
+    properties:
+      error:
+        type: string
+    type: object
+  server.getACL:
+    properties:
+      allow_all:
+        description: when true, client is allowed to access everything
+        example: false
+        type: boolean
+      allowed_hosts:
+        description: represents a list of host headers the client is allowed to access
+        example:
+        - git.example.com
+        - wiki.example.com
+        items:
+          type: string
+        type: array
+      ip_address:
+        description: IP address this ACL applies to
+        example: 192.168.1.100
+        type: string
+      ttl:
+        description: after this date, the ACL is no longer valid (RFC3339 format)
+        example: "2025-12-31T23:59:59Z"
+        type: string
+      user_ids:
+        description: Users associated with this ACL
+        example:
+        - 5e8848
+        - a3f129
+        items:
+          type: string
+        type: array
     type: object
   server.getUser:
     properties:
@@ -71,14 +137,41 @@ definitions:
         example: true
         type: boolean
       id:
-        description: A unique identifier for this User
-        example: 5e8848
+        description: A unique identifier for this User (4-64 characters)
+        example: cloud
         type: string
       ttl_minutes:
         description: Represents the number of minutes this User's IP is whitelisted
           for after a successful challenge
         example: 60
         type: integer
+    type: object
+  server.modifyACL:
+    properties:
+      allow_all:
+        description: when true, client is allowed to access everything
+        example: false
+        type: boolean
+      allowed_hosts:
+        description: represents a list of host headers the client is allowed to access
+        example:
+        - git.example.com
+        - wiki.example.com
+        items:
+          type: string
+        type: array
+      ttl:
+        description: after this date, the ACL is no longer valid (RFC3339 format)
+        example: "2025-12-31T23:59:59Z"
+        type: string
+      user_ids:
+        description: Users associated with this ACL
+        example:
+        - 5e8848
+        - a3f129
+        items:
+          type: string
+        type: array
     type: object
   server.modifyUser:
     properties:
@@ -126,17 +219,200 @@ definitions:
         type: string
     type: object
 info:
-  contact:
-    email: gbolo@linuxctl.com
-    name: API Support
-  description: Swagger API for Protego - https://github.com/gbolo/protego
-  license:
-    name: MIT
-    url: https://github.com/gbolo/protego/blob/master/LICENSE
-  termsOfService: http://swagger.io/terms/
-  title: Protego - REST API
-  version: "1.0"
+  contact: {}
 paths:
+  /acl:
+    get:
+      description: Returns a list of all ACLs
+      parameters:
+      - description: Admin secret for authentication
+        in: header
+        name: Admin-Secret
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/server.getACL'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+      summary: Get all ACLs
+      tags:
+      - ACL Management
+  /acl/{ip}:
+    delete:
+      description: Deletes an ACL for a specific IP address
+      parameters:
+      - description: IP Address
+        in: path
+        name: ip
+        required: true
+        type: string
+      - description: Admin secret for authentication
+        in: header
+        name: Admin-Secret
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.getACL'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+      summary: Delete an ACL
+      tags:
+      - ACL Management
+    get:
+      description: Returns ACL details for a specific IP address
+      parameters:
+      - description: IP Address
+        in: path
+        name: ip
+        required: true
+        type: string
+      - description: Admin secret for authentication
+        in: header
+        name: Admin-Secret
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.getACL'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+      summary: Get ACL details
+      tags:
+      - ACL Management
+    post:
+      consumes:
+      - application/json
+      description: Creates a new ACL for an IP address
+      parameters:
+      - description: IP Address
+        in: path
+        name: ip
+        required: true
+        type: string
+      - description: Admin secret for authentication
+        in: header
+        name: Admin-Secret
+        required: true
+        type: string
+      - description: ACL configuration
+        in: body
+        name: acl
+        required: true
+        schema:
+          $ref: '#/definitions/server.addACL'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/server.getACL'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+      summary: Add a new ACL
+      tags:
+      - ACL Management
+    put:
+      consumes:
+      - application/json
+      description: Updates ACL configuration for an IP address
+      parameters:
+      - description: IP Address
+        in: path
+        name: ip
+        required: true
+        type: string
+      - description: Admin secret for authentication
+        in: header
+        name: Admin-Secret
+        required: true
+        type: string
+      - description: ACL configuration
+        in: body
+        name: acl
+        required: true
+        schema:
+          $ref: '#/definitions/server.modifyACL'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.getACL'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+      summary: Update an existing ACL
+      tags:
+      - ACL Management
   /authorize:
     get:
       description: Configure NGINX auth_request to this endpoint
@@ -169,6 +445,11 @@ paths:
         name: X-Real-IP
         required: true
         type: string
+      - description: User ID (4-64 characters)
+        in: header
+        name: User-ID
+        required: true
+        type: string
       - description: Secret that was given to/by the user
         in: header
         name: User-Secret
@@ -181,7 +462,7 @@ paths:
           description: 'challenge was accepted: the value of X-Real-IP has been granted
             an ACL'
         "400":
-          description: 'bad request: X-Real-IP is not set'
+          description: 'bad request: X-Real-IP is not set or User-ID is invalid'
         "401":
           description: 'unauthorized: the user secret is incorrect or the user is
             disabled'
@@ -192,9 +473,9 @@ paths:
       - Authorization
   /user:
     get:
-      description: get all Users
+      description: Returns a list of all users
       parameters:
-      - description: Admin Secret
+      - description: Admin secret for authentication
         in: header
         name: Admin-Secret
         required: true
@@ -208,20 +489,29 @@ paths:
             items:
               $ref: '#/definitions/server.getUser'
             type: array
-      summary: Retrieve all Users
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+      summary: Get all users
       tags:
-      - User
+      - User Management
     post:
       consumes:
       - application/json
-      description: add by json user
+      description: Creates a new user with the provided configuration. User ID must
+        be provided (4-64 characters).
       parameters:
-      - description: Admin Secret
+      - description: Admin secret for authentication
         in: header
         name: Admin-Secret
         required: true
         type: string
-      - description: Add User
+      - description: User configuration
         in: body
         name: user
         required: true
@@ -230,48 +520,70 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
-          description: OK
+        "201":
+          description: Created
           schema:
             $ref: '#/definitions/server.getUser'
-      summary: Add a new User
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+      summary: Add a new user
       tags:
-      - User
+      - User Management
   /user/{id}:
     delete:
-      description: remove a User by ID
+      description: Deletes a user from the system
       parameters:
-      - description: Admin Secret
-        in: header
-        name: Admin-Secret
-        required: true
-        type: string
       - description: User ID
         in: path
         name: id
         required: true
         type: string
-      produces:
-      - application/json
+      - description: Admin secret for authentication
+        in: header
+        name: Admin-Secret
+        required: true
+        type: string
       responses:
         "200":
           description: OK
           schema:
             $ref: '#/definitions/server.getUser'
-      summary: Remove a User based on provided ID
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+      summary: Delete a user
       tags:
-      - User
+      - User Management
     get:
-      description: get User by ID
+      description: Returns details for a specific user
       parameters:
-      - description: Admin Secret
-        in: header
-        name: Admin-Secret
-        required: true
-        type: string
       - description: User ID
         in: path
         name: id
+        required: true
+        type: string
+      - description: Admin secret for authentication
+        in: header
+        name: Admin-Secret
         required: true
         type: string
       produces:
@@ -281,20 +593,33 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/server.getUser'
-      summary: Retrieve a User based on provided ID
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+      summary: Get user details
       tags:
-      - User
+      - User Management
     put:
       consumes:
       - application/json
-      description: update by json user
+      description: Updates user configuration
       parameters:
-      - description: Admin Secret
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Admin secret for authentication
         in: header
         name: Admin-Secret
         required: true
         type: string
-      - description: Update User
+      - description: User configuration
         in: body
         name: user
         required: true
@@ -307,12 +632,28 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/server.getUser'
-      summary: Update an existing User
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+      summary: Update an existing user
       tags:
-      - User
+      - User Management
   /version:
     get:
-      description: Retrieve the version information of this Protego server
+      description: Returns version information about this server
       produces:
       - application/json
       responses:
@@ -322,5 +663,5 @@ paths:
             $ref: '#/definitions/server.version'
       summary: Version information
       tags:
-      - Version
+      - Information
 swagger: "2.0"

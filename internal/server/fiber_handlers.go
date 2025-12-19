@@ -1,0 +1,813 @@
+package server
+
+import (
+	"fmt"
+	"strings"
+	"time"
+
+	validate "github.com/asaskevich/govalidator"
+	"github.com/gbolo/protego/internal/meta"
+	"github.com/gbolo/protego/pkg/dataprovider"
+	"github.com/gofiber/fiber/v2"
+	"github.com/spf13/viper"
+)
+
+const (
+	// User ID validation constraints
+	minUserIDLength = 4
+	maxUserIDLength = 64
+)
+
+// fiberHandlerVersion godoc
+// @Summary Version information
+// @Description Returns version information about this server
+// @Tags Information
+// @Produce  json
+// @Success 200 {object} version
+// @Router /version [get]
+func fiberHandlerVersion(c *fiber.Ctx) error {
+	return c.JSON(version{meta.Version, meta.CommitSHA})
+}
+
+// fiberHandlerHealthz godoc
+// @Summary Health check
+// @Description Returns 200 when the server is healthy
+// @Tags Information
+// @Produce  json
+// @Success 200 {object} healthz
+// @Router /healthz [get]
+func fiberHandlerHealthz(c *fiber.Ctx) error {
+	return c.JSON(healthz{"healthy"})
+}
+
+// fiberHandlerConfig godoc
+// @Summary Configuration dump
+// @Description Returns the current server configuration in JSON format
+// @Tags Information
+// @Produce  json
+// @Param Admin-Secret header string true "Admin secret for authentication"
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} errorResponse
+// @Router /config [get]
+func fiberHandlerConfig(c *fiber.Ctx) error {
+	// Check admin secret
+	if !checkAdminSecret(c.Get("Admin-Secret")) {
+		return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"unauthorized"})
+	}
+
+	// Return non-sensitive relevant configuration only
+	config := &fiber.Map{
+		"log": &fiber.Map{
+			"level": viper.GetString("log.level"),
+		},
+		"server": &fiber.Map{
+			"bind_address": viper.GetString("server.bind_address"),
+			"bind_port":    viper.GetString("server.bind_port"),
+		},
+		"db": &fiber.Map{
+			"provider": viper.GetString("db.provider"),
+		},
+		"ttl": &fiber.Map{
+			"max": viper.GetString("ttl.max"),
+		},
+	}
+
+	return c.Status(200).JSON(config)
+}
+
+// fiberHandlerAuthorize godoc
+// @Summary NGINX auth_request destination
+// @Description Configure NGINX auth_request to this endpoint
+// @Tags Authorization
+// @Param X-Real-IP header string true "IP address of the user"
+// @Param Host header string false "the host (FQDN) the user is making a request to"
+// @Success 200 "access granted"
+// @Failure 401 "unauthorized - user IP is unknown or not permitted to access this host"
+// @Router /authorize [get]
+func fiberHandlerAuthorize(c *fiber.Ctx) error {
+	clientIP := c.Get("X-Real-IP")
+	if !validate.IsIP(clientIP) {
+		log.Errorf("X-Real-IP is either set incorrectly or missing! DENYING ACCESS")
+		log.Debugf("X-Real-IP is of length %d with value: %s", len(clientIP), clientIP)
+		return c.SendStatus(fiber.StatusUnauthorized)
+	}
+
+	// lookup this client ip
+	acl, err := dataProvider.GetACL(clientIP)
+	if err != nil {
+		log.Warningf("error during dataProvider.GetACL: %v", err)
+	}
+	// check the dynamic DNS provider if acl is nil
+	if acl == nil {
+		acl = ddnsProvider.GetACL(clientIP)
+	}
+	// if neither provider can find the IP it's blocked
+	if acl == nil {
+		log.Debugf("client (%s) is unknown", clientIP)
+		return c.SendStatus(fiber.StatusUnauthorized)
+	}
+
+	// the client IP is in our database, now check what hosts it can access
+	if acl.AllowAll {
+		log.Debugf("client (%s) has ALLOW_ALL privileges", clientIP)
+		return c.SendStatus(fiber.StatusOK)
+	}
+	log.Debugf("client host acl: %v", acl.AllowedHosts)
+	if acl.CheckHost(c.Hostname()) {
+		log.Debugf("client (%s) ALLOWED access to host %s", clientIP, c.Hostname())
+		return c.SendStatus(fiber.StatusOK)
+	}
+
+	// by default we deny everything
+	log.Debugf("client (%s) DENIED access to host %s", clientIP, c.Hostname())
+	return c.SendStatus(fiber.StatusUnauthorized)
+}
+
+// fiberHandlerChallenge godoc
+// @Summary Challenge used to authorize an IP address for access
+// @Description A user must successfully POST to this URL in order for their IP address to be granted access
+// @Tags Authorization
+// @Produce  json
+// @Param X-Real-IP header string true "IP address of the user"
+// @Param User-ID header string true "User ID (4-64 characters)"
+// @Param User-Secret header string true "Secret that was given to/by the user"
+// @Success 200 "challenge was accepted: the value of X-Real-IP has been granted an ACL" {object} challengeResponse
+// @Failure 400 "bad request: X-Real-IP is not set or User-ID is invalid" {object} errorResponse
+// @Failure 401 "unauthorized: the user secret is incorrect or the user is disabled" {object} errorResponse
+// @Failure 500 "server could not process the request" {object} errorResponse
+// @Router /challenge [post]
+func fiberHandlerChallenge(c *fiber.Ctx) error {
+	// IMPORTANT: Fiber reuses buffers for headers, so we must copy strings to avoid corruption
+	// Using c.Copy() on the full context or strings.Clone() ensures strings have independent backing arrays
+	// see: https://docs.gofiber.io/#zero-allocation for more details
+	clientIP := c.Get("X-Real-IP")
+	clientIP = strings.Clone(clientIP) // Create independent copy
+
+	if !validate.IsIP(clientIP) {
+		log.Errorf("X-Real-IP is either set incorrectly or missing! DENYING ACCESS")
+		log.Debugf("X-Real-IP is of length %d with value: %s", len(clientIP), clientIP)
+		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"Unable to properly determine user's IP address"})
+	}
+
+	// Copy these strings too to prevent buffer reuse corruption
+	userID := strings.Clone(c.Get("User-ID"))
+	clientSecret := strings.Clone(c.Get("User-Secret"))
+
+	// Validate User-ID length
+	if len(userID) < minUserIDLength || len(userID) > maxUserIDLength {
+		log.Infof("user challenge failed due to invalid User-ID length from IP %s", clientIP)
+		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"User-ID must be between 4 and 64 characters"})
+	}
+
+	// Validate secret length
+	if len(clientSecret) < 6 {
+		log.Infof("user %s was denied due to invalid secret length from IP %s", userID, clientIP)
+		return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"User-Secret is incorrect"})
+	}
+
+	// check if this user exists
+	actualUser, err := dataProvider.GetUser(userID)
+	if actualUser == nil || err != nil {
+		log.Infof("user %s was denied - user not found from IP %s", userID, clientIP)
+		return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"unable to find user"})
+	}
+
+	// verify the secret matches
+	if verifyErr := dataprovider.VerifySecret(actualUser.Secret, clientSecret); verifyErr != nil {
+		log.Infof("user %s was denied due to incorrect secret from IP %s", userID, clientIP)
+		return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"User-Secret is incorrect"})
+	}
+
+	// deny the user if it is disabled
+	if !actualUser.Enabled {
+		log.Infof("user %s was denied due to being disabled from IP %s", userID, clientIP)
+		return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"this user is currently disabled"})
+	}
+
+	// add this user's IP to whitelist
+	newAcl := dataprovider.ACL{
+		AllowAll:     actualUser.ACLAllowAll,
+		AllowedHosts: actualUser.ACLAllowedHosts,
+		UserIDs:      []string{actualUser.ID},
+	}
+	if actualUser.TTLMinutes > 0 {
+		ttl := time.Now().Add(time.Duration(actualUser.TTLMinutes) * time.Minute)
+		newAcl.TTL = &ttl
+		log.Infof("set user IP (%s) TTL to: %v", clientIP, ttl)
+	}
+
+	// check if an acl already exists for this IP
+	existingAcl, err := dataProvider.GetACL(clientIP)
+	if err != nil {
+		log.Errorf("unable to get ACL from DB: %s", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(errorResponse{"there was an error handling this request"})
+	}
+
+	// log a warning if we will be merging a different user ACLs together
+	if existingAcl != nil && !existingAcl.CheckUserId(actualUser.ID) {
+		log.Warningf("other user(s) %v already have an ACL for client IP: %s. Will need to merge ACls", existingAcl.UserIDs, clientIP)
+	}
+
+	acl := dataprovider.MergeACL(&newAcl, existingAcl)
+	err = dataProvider.AddIp(clientIP, acl)
+	if err != nil {
+		log.Errorf("unable to add ACL to DB: %s", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(errorResponse{"there was an error handling this request"})
+	}
+
+	// successful response
+	log.Infof("user %s with IP (%s) has been added to ACL", actualUser.ID, clientIP)
+	apiResponse := challengeResponse{
+		Message:   "access has been granted",
+		UserId:    actualUser.ID,
+		IpAddress: clientIP,
+	}
+	apiResponse.ACL = *acl
+	return c.Status(fiber.StatusAccepted).JSON(apiResponse)
+}
+
+// fiberHandlerUserAdd godoc
+// @Summary Add a new user
+// @Description Creates a new user with the provided configuration. User ID must be provided (4-64 characters).
+// @Tags User Management
+// @Accept json
+// @Produce json
+// @Param Admin-Secret header string true "Admin secret for authentication"
+// @Param user body addUser true "User configuration"
+// @Success 201 {object} getUser
+// @Failure 400 {object} errorResponse
+// @Failure 401 {object} errorResponse
+// @Failure 500 {object} errorResponse
+// @Router /user [post]
+func fiberHandlerUserAdd(c *fiber.Ctx) error {
+	// Check admin secret
+	if !checkAdminSecret(c.Get("Admin-Secret")) {
+		return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"unauthorized"})
+	}
+
+	var req addUser
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"invalid request body"})
+	}
+
+	// Validate required fields
+	if req.ID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"user ID is required"})
+	}
+
+	if req.Secret == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"secret is required"})
+	}
+
+	// Validate ID using govalidator
+	if _, err := validate.ValidateStruct(req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{err.Error()})
+	}
+
+	// Validate TTL against configured maximum
+	maxTTL := viper.GetInt("ttl.max")
+	if maxTTL > 0 {
+		// Max TTL is configured (not unlimited)
+		if req.TTLMinutes == 0 {
+			return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"TTL is required and cannot be 0 (unlimited is not allowed)"})
+		}
+		if req.TTLMinutes > maxTTL {
+			return c.Status(fiber.StatusBadRequest).JSON(errorResponse{fmt.Sprintf("TTL has exceeded max allowed value of %d minutes", maxTTL)})
+		}
+	}
+
+	// Create user with admin-defined ID
+	user, err := dataprovider.NewUser(req.ID, req.Secret, req.Description)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{err.Error()})
+	}
+
+	// Set user properties
+	user.Enabled = req.Enabled
+	user.ACLAllowAll = req.ACLAllowAll
+	user.ACLAllowedHosts = req.ACLAllowedHosts
+	user.DNSNames = req.DNSNames
+	user.TTLMinutes = req.TTLMinutes
+
+	// Add user to provider
+	if err := dataProvider.AddUser(user); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(errorResponse{err.Error()})
+	}
+
+	log.Infof("user added: %s", user.ID)
+
+	// Notify DDNS provider to sync this user
+	if err := ddnsProvider.SyncUser(user.ID); err != nil {
+		log.Warningf("failed to sync user %s to DDNS provider: %v", user.ID, err)
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(getUserConvert(user))
+}
+
+// fiberHandlerUserUpdate godoc
+// @Summary Update an existing user
+// @Description Updates user configuration
+// @Tags User Management
+// @Accept json
+// @Produce json
+// @Param id path string true "User ID"
+// @Param Admin-Secret header string true "Admin secret for authentication"
+// @Param user body modifyUser true "User configuration"
+// @Success 200 {object} getUser
+// @Failure 400 {object} errorResponse
+// @Failure 401 {object} errorResponse
+// @Failure 404 {object} errorResponse
+// @Failure 500 {object} errorResponse
+// @Router /user/{id} [put]
+func fiberHandlerUserUpdate(c *fiber.Ctx) error {
+	// Check admin secret
+	if !checkAdminSecret(c.Get("Admin-Secret")) {
+		return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"unauthorized"})
+	}
+
+	id := c.Params("id")
+	if id == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"user ID is required"})
+	}
+
+	var req modifyUser
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"invalid request body"})
+	}
+
+	// Get existing user
+	existingUser, err := dataProvider.GetUser(id)
+	if err != nil || existingUser == nil {
+		return c.Status(fiber.StatusNotFound).JSON(errorResponse{"user not found"})
+	}
+
+	// Track if user is being disabled
+	userBeingDisabled := existingUser.Enabled && !req.Enabled
+
+	// Validate TTL against configured maximum
+	maxTTL := viper.GetInt("ttl.max")
+	if maxTTL > 0 {
+		// Max TTL is configured (not unlimited)
+		if req.TTLMinutes == 0 {
+			return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"TTL is required and cannot be 0 (unlimited is not allowed)"})
+		}
+		if req.TTLMinutes > maxTTL {
+			return c.Status(fiber.StatusBadRequest).JSON(errorResponse{fmt.Sprintf("TTL has exceeded max allowed value of %d minutes", maxTTL)})
+		}
+	}
+
+	// Update user properties
+	existingUser.Enabled = req.Enabled
+	existingUser.Description = req.Description
+	existingUser.ACLAllowAll = req.ACLAllowAll
+	existingUser.ACLAllowedHosts = req.ACLAllowedHosts
+	existingUser.DNSNames = req.DNSNames
+	existingUser.TTLMinutes = req.TTLMinutes
+
+	// Update user in provider
+	if err := dataProvider.UpdateUser(existingUser); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(errorResponse{err.Error()})
+	}
+
+	log.Infof("user updated: %s", existingUser.ID)
+
+	// If user is being disabled, clean up their ACLs
+	if userBeingDisabled {
+		cleanupUserACLs(existingUser.ID)
+		// Also notify DDNS provider for users with DNS names
+		if len(existingUser.DNSNames) > 0 {
+			if err := ddnsProvider.SyncUser(existingUser.ID); err != nil {
+				log.Warningf("failed to sync user %s to DDNS provider: %v", existingUser.ID, err)
+			}
+		}
+	} else {
+		// Notify DDNS provider to sync this user (for DNS-based ACLs)
+		if err := ddnsProvider.SyncUser(existingUser.ID); err != nil {
+			log.Warningf("failed to sync user %s to DDNS provider: %v", existingUser.ID, err)
+		}
+	}
+
+	return c.JSON(getUserConvert(existingUser))
+}
+
+// fiberHandlerUserGet godoc
+// @Summary Get user details
+// @Description Returns details for a specific user
+// @Tags User Management
+// @Produce json
+// @Param id path string true "User ID"
+// @Param Admin-Secret header string true "Admin secret for authentication"
+// @Success 200 {object} getUser
+// @Failure 401 {object} errorResponse
+// @Failure 404 {object} errorResponse
+// @Router /user/{id} [get]
+func fiberHandlerUserGet(c *fiber.Ctx) error {
+	// Check admin secret
+	if !checkAdminSecret(c.Get("Admin-Secret")) {
+		return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"unauthorized"})
+	}
+
+	id := c.Params("id")
+	if id == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"user ID is required"})
+	}
+
+	user, err := dataProvider.GetUser(id)
+	if err != nil || user == nil {
+		return c.Status(fiber.StatusNotFound).JSON(errorResponse{"user not found"})
+	}
+
+	return c.JSON(getUserConvert(user))
+}
+
+// fiberHandlerUserGetAll godoc
+// @Summary Get all users
+// @Description Returns a list of all users
+// @Tags User Management
+// @Produce json
+// @Param Admin-Secret header string true "Admin secret for authentication"
+// @Success 200 {array} getUser
+// @Failure 401 {object} errorResponse
+// @Failure 500 {object} errorResponse
+// @Router /user [get]
+func fiberHandlerUserGetAll(c *fiber.Ctx) error {
+	// Check admin secret
+	if !checkAdminSecret(c.Get("Admin-Secret")) {
+		return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"unauthorized"})
+	}
+
+	users, err := dataProvider.GetAllUsers()
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(errorResponse{err.Error()})
+	}
+
+	return c.JSON(getAllUsersConvert(users))
+}
+
+// fiberHandlerUserDelete godoc
+// @Summary Delete a user
+// @Description Deletes a user from the system
+// @Tags User Management
+// @Param id path string true "User ID"
+// @Param Admin-Secret header string true "Admin secret for authentication"
+// @Success 200 {object} getUser
+// @Failure 401 {object} errorResponse
+// @Failure 404 {object} errorResponse
+// @Failure 500 {object} errorResponse
+// @Router /user/{id} [delete]
+func fiberHandlerUserDelete(c *fiber.Ctx) error {
+	// Check admin secret
+	if !checkAdminSecret(c.Get("Admin-Secret")) {
+		return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"unauthorized"})
+	}
+
+	id := c.Params("id")
+	if id == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"user ID is required"})
+	}
+
+	// Check if user exists
+	user, err := dataProvider.GetUser(id)
+	if err != nil || user == nil {
+		return c.Status(fiber.StatusNotFound).JSON(errorResponse{"user not found"})
+	}
+
+	// Delete user
+	if err := dataProvider.RemoveUser(user); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(errorResponse{err.Error()})
+	}
+
+	log.Infof("user deleted: %s", id)
+
+	// Clean up all ACLs associated with this user
+	cleanupUserACLs(user.ID)
+
+	// Notify DDNS provider to remove this user
+	ddnsProvider.RemoveUser(user.ID)
+
+	return c.JSON(getUserConvert(user))
+}
+
+// fiberHandlerACLAdd godoc
+// @Summary Add a new ACL
+// @Description Creates a new ACL for an IP address
+// @Tags ACL Management
+// @Accept json
+// @Produce json
+// @Param ip path string true "IP Address"
+// @Param Admin-Secret header string true "Admin secret for authentication"
+// @Param acl body addACL true "ACL configuration"
+// @Success 201 {object} getACL
+// @Failure 400 {object} errorResponse
+// @Failure 401 {object} errorResponse
+// @Failure 500 {object} errorResponse
+// @Router /acl/{ip} [post]
+func fiberHandlerACLAdd(c *fiber.Ctx) error {
+	// Check admin secret
+	if !checkAdminSecret(c.Get("Admin-Secret")) {
+		return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"unauthorized"})
+	}
+
+	// IMPORTANT: Clone the IP string to avoid Fiber buffer reuse corruption
+	ip := strings.Clone(c.Params("ip"))
+	if !validate.IsIP(ip) {
+		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"invalid IP address"})
+	}
+
+	var req addACL
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"invalid request body"})
+	}
+
+	// Create ACL
+	acl := dataprovider.ACL{
+		AllowAll:     req.AllowAll,
+		AllowedHosts: req.AllowedHosts,
+		UserIDs:      req.UserIDs,
+	}
+
+	// Validate TTL against configured maximum
+	maxTTL := viper.GetInt("ttl.max")
+	if maxTTL > 0 {
+		// Max TTL is configured (not unlimited)
+		if req.TTL == nil || *req.TTL == "" {
+			return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"TTL is required and cannot be unlimited"})
+		}
+	}
+
+	// Parse TTL if provided
+	if req.TTL != nil && *req.TTL != "" {
+		ttl, err := time.Parse(time.RFC3339, *req.TTL)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"invalid TTL format, use RFC3339"})
+		}
+
+		// Validate TTL does not exceed maximum
+		if maxTTL > 0 {
+			// Calculate duration from now to the provided TTL
+			durationMinutes := int(time.Until(ttl).Minutes())
+			if durationMinutes > maxTTL {
+				return c.Status(fiber.StatusBadRequest).JSON(errorResponse{fmt.Sprintf("TTL has exceeded max allowed value of %d minutes", maxTTL)})
+			}
+		}
+
+		acl.TTL = &ttl
+	}
+
+	// Add ACL to provider
+	if err := dataProvider.AddIp(ip, &acl); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(errorResponse{err.Error()})
+	}
+
+	log.Infof("ACL added for IP: %s", ip)
+	return c.Status(fiber.StatusCreated).JSON(getACLConvert(ip, &acl))
+}
+
+// fiberHandlerACLUpdate godoc
+// @Summary Update an existing ACL
+// @Description Updates ACL configuration for an IP address
+// @Tags ACL Management
+// @Accept json
+// @Produce json
+// @Param ip path string true "IP Address"
+// @Param Admin-Secret header string true "Admin secret for authentication"
+// @Param acl body modifyACL true "ACL configuration"
+// @Success 200 {object} getACL
+// @Failure 400 {object} errorResponse
+// @Failure 401 {object} errorResponse
+// @Failure 404 {object} errorResponse
+// @Failure 500 {object} errorResponse
+// @Router /acl/{ip} [put]
+func fiberHandlerACLUpdate(c *fiber.Ctx) error {
+	// Check admin secret
+	if !checkAdminSecret(c.Get("Admin-Secret")) {
+		return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"unauthorized"})
+	}
+
+	// IMPORTANT: Clone the IP string to avoid Fiber buffer reuse corruption
+	ip := strings.Clone(c.Params("ip"))
+	if !validate.IsIP(ip) {
+		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"invalid IP address"})
+	}
+
+	var req modifyACL
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"invalid request body"})
+	}
+
+	// Check if ACL exists
+	existingACL, err := dataProvider.GetACL(ip)
+	if err != nil || existingACL == nil {
+		return c.Status(fiber.StatusNotFound).JSON(errorResponse{"ACL not found"})
+	}
+
+	// Update ACL properties
+	existingACL.AllowAll = req.AllowAll
+	existingACL.AllowedHosts = req.AllowedHosts
+	existingACL.UserIDs = req.UserIDs
+
+	// Validate TTL against configured maximum
+	maxTTL := viper.GetInt("ttl.max")
+	if maxTTL > 0 {
+		// Max TTL is configured (not unlimited)
+		if req.TTL == nil || *req.TTL == "" {
+			return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"TTL is required and cannot be unlimited"})
+		}
+	}
+
+	// Parse TTL if provided
+	if req.TTL != nil && *req.TTL != "" {
+		ttl, err := time.Parse(time.RFC3339, *req.TTL)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"invalid TTL format, use RFC3339"})
+		}
+
+		// Validate TTL does not exceed maximum
+		if maxTTL > 0 {
+			// Calculate duration from now to the provided TTL
+			durationMinutes := int(time.Until(ttl).Minutes())
+			if durationMinutes > maxTTL {
+				return c.Status(fiber.StatusBadRequest).JSON(errorResponse{fmt.Sprintf("TTL has exceeded max allowed value of %d minutes", maxTTL)})
+			}
+		}
+
+		existingACL.TTL = &ttl
+	} else {
+		existingACL.TTL = nil
+	}
+
+	// Update ACL in provider
+	if err := dataProvider.AddIp(ip, existingACL); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(errorResponse{err.Error()})
+	}
+
+	log.Infof("ACL updated for IP: %s", ip)
+	return c.JSON(getACLConvert(ip, existingACL))
+}
+
+// fiberHandlerACLGet godoc
+// @Summary Get ACL details
+// @Description Returns ACL details for a specific IP address
+// @Tags ACL Management
+// @Produce json
+// @Param ip path string true "IP Address"
+// @Param Admin-Secret header string true "Admin secret for authentication"
+// @Success 200 {object} getACL
+// @Failure 400 {object} errorResponse
+// @Failure 401 {object} errorResponse
+// @Failure 404 {object} errorResponse
+// @Router /acl/{ip} [get]
+func fiberHandlerACLGet(c *fiber.Ctx) error {
+	// Check admin secret
+	if !checkAdminSecret(c.Get("Admin-Secret")) {
+		return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"unauthorized"})
+	}
+
+	// IMPORTANT: Clone the IP string to avoid Fiber buffer reuse corruption
+	ip := strings.Clone(c.Params("ip"))
+	if !validate.IsIP(ip) {
+		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"invalid IP address"})
+	}
+
+	acl, err := dataProvider.GetACL(ip)
+	if err != nil || acl == nil {
+		return c.Status(fiber.StatusNotFound).JSON(errorResponse{"ACL not found"})
+	}
+
+	return c.JSON(getACLConvert(ip, acl))
+}
+
+// fiberHandlerACLGetAll godoc
+// @Summary Get all ACLs
+// @Description Returns a list of all ACLs
+// @Tags ACL Management
+// @Produce json
+// @Param Admin-Secret header string true "Admin secret for authentication"
+// @Success 200 {array} getACL
+// @Failure 401 {object} errorResponse
+// @Failure 500 {object} errorResponse
+// @Router /acl [get]
+func fiberHandlerACLGetAll(c *fiber.Ctx) error {
+	// Check admin secret
+	if !checkAdminSecret(c.Get("Admin-Secret")) {
+		return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"unauthorized"})
+	}
+
+	acls, err := dataProvider.GetAllACLs()
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(errorResponse{err.Error()})
+	}
+
+	return c.JSON(getAllACLsConvert(acls))
+}
+
+// fiberHandlerACLDelete godoc
+// @Summary Delete an ACL
+// @Description Deletes an ACL for a specific IP address
+// @Tags ACL Management
+// @Param ip path string true "IP Address"
+// @Param Admin-Secret header string true "Admin secret for authentication"
+// @Success 200 {object} getACL
+// @Failure 400 {object} errorResponse
+// @Failure 401 {object} errorResponse
+// @Failure 404 {object} errorResponse
+// @Failure 500 {object} errorResponse
+// @Router /acl/{ip} [delete]
+func fiberHandlerACLDelete(c *fiber.Ctx) error {
+	// Check admin secret
+	if !checkAdminSecret(c.Get("Admin-Secret")) {
+		return c.Status(fiber.StatusUnauthorized).JSON(errorResponse{"unauthorized"})
+	}
+
+	// IMPORTANT: Clone the IP string to avoid Fiber buffer reuse corruption
+	ip := strings.Clone(c.Params("ip"))
+	if !validate.IsIP(ip) {
+		return c.Status(fiber.StatusBadRequest).JSON(errorResponse{"invalid IP address"})
+	}
+
+	// Check if ACL exists
+	acl, err := dataProvider.GetACL(ip)
+	if err != nil || acl == nil {
+		return c.Status(fiber.StatusNotFound).JSON(errorResponse{"ACL not found"})
+	}
+
+	// Delete ACL
+	if err := dataProvider.RemoveIp(ip); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(errorResponse{err.Error()})
+	}
+
+	log.Infof("ACL deleted for IP: %s", ip)
+	return c.JSON(getACLConvert(ip, acl))
+}
+
+// cleanupUserACLs removes a user from all ACLs they belong to
+// If an ACL only has this user, the entire ACL is removed
+// If an ACL has multiple users, only this user's ID is removed
+func cleanupUserACLs(userID string) {
+	// Get all ACLs
+	allACLs, err := dataProvider.GetAllACLs()
+	if err != nil {
+		log.Errorf("failed to get ACLs during user %s cleanup: %v", userID, err)
+		return
+	}
+
+	removedCount := 0
+	updatedCount := 0
+
+	// Iterate through all ACLs
+	for ip, acl := range allACLs {
+		if acl == nil {
+			// the dataprovider should NEVER return a nil acl in the GetAllACLs method, so this is a bug
+			log.Errorf("The dataprovider returned a nil ACL for IP %s", ip)
+			continue
+		}
+
+		// Check if this ACL contains the user
+		if !acl.CheckUserId(userID) {
+			continue
+		}
+
+		// If this is the only user in the ACL, remove the entire ACL
+		if len(acl.UserIDs) == 1 {
+			if err := dataProvider.RemoveIp(ip); err != nil {
+				log.Errorf("failed to remove ACL for IP %s: %v", ip, err)
+			} else {
+				log.Infof("removed ACL for IP %s (user %s was the only user)", ip, userID)
+				removedCount++
+			}
+		} else {
+			// Multiple users, need to create a new ACL without this user
+			// Don't modify the existing ACL in place
+			newUserIDs := make([]string, 0, len(acl.UserIDs)-1)
+			for _, uid := range acl.UserIDs {
+				if uid != userID {
+					newUserIDs = append(newUserIDs, uid)
+				}
+			}
+
+			newACL := &dataprovider.ACL{
+				AllowAll:     acl.AllowAll,
+				AllowedHosts: acl.AllowedHosts,
+				UserIDs:      newUserIDs,
+				TTL:          acl.TTL,
+			}
+
+			if err := dataProvider.AddIp(ip, newACL); err != nil {
+				log.Errorf("failed to update ACL for IP %s: %v", ip, err)
+			} else {
+				log.Infof("removed user %s from ACL for IP %s (remaining users: %v)", userID, ip, newUserIDs)
+				updatedCount++
+			}
+		}
+	}
+
+	if removedCount > 0 || updatedCount > 0 {
+		log.Infof("cleaned up ACLs for user %s: %d removed, %d updated", userID, removedCount, updatedCount)
+	}
+}
+
+// checkAdminSecret verifies the admin secret
+func checkAdminSecret(providedSecret string) bool {
+	configuredSecret := viper.GetString("admin.secret")
+	return configuredSecret != "" && providedSecret == configuredSecret
+}
