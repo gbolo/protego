@@ -48,6 +48,7 @@ func initViper(cfgFile string) {
 	// set default config name and paths to look for it
 	viper.SetConfigType("yaml")
 	viper.SetConfigName(AppName)
+	viper.AddConfigPath("/etc/protego")
 	viper.AddConfigPath("./testdata/sampleconfig")
 
 	// if the user provides a config file in a flag, lets use it

@@ -1,6 +1,6 @@
 package server
 
-import "github.com/gbolo/protego/dataprovider"
+import "github.com/gbolo/protego/pkg/dataprovider"
 
 type addUser struct {
 	// A unique identifier for this User (4-64 characters)
@@ -56,6 +56,10 @@ type getUser struct {
 type version struct {
 	Version  string `json:"version" example:"v1.0"`
 	BuildRef string `json:"build_ref" example:"git-30b8019"`
+}
+
+type healthz struct {
+	Status string `json:"status" example:"healthy"`
 }
 
 type challengeResponse struct {

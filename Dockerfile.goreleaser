@@ -1,0 +1,45 @@
+# Runtime stage - GoReleaser will provide the pre-built binaries
+FROM alpine:3.23
+
+# Install runtime dependencies
+RUN apk add --no-cache \
+    ca-certificates \
+    tzdata \
+    curl
+
+# Create non-root user
+RUN addgroup -g 1000 protego && \
+    adduser -D -u 1000 -G protego protego
+
+# Create necessary directories
+RUN mkdir -p /app /etc/protego && \
+    chown -R protego:protego /app /etc/protego
+
+WORKDIR /app
+
+# Build arg for target platform (provided by buildx)  
+ARG TARGETPLATFORM
+
+# Copy pre-built binary from goreleaser context (web UI is now embedded)
+# GoReleaser organizes binaries by platform: linux/amd64/protego, linux/arm64/protego, etc.
+COPY ${TARGETPLATFORM}/protego .
+
+# Copy default config
+COPY ./testdata/sampleconfig/protego.yaml /etc/protego/protego.yml
+
+# Switch to non-root user
+USER protego
+
+# Expose the default port
+EXPOSE 8080
+
+# ensure in docker we bind to 0.0.0.0:8080 for health checks
+ENV PROTEGO_SERVER_BIND_ADDRESS=0.0.0.0 \
+    PROTEGO_SERVER_BIND_PORT=8080
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8080/api/v1/healthz || exit 1
+
+
+# Run the binary
+ENTRYPOINT ["/app/protego"]

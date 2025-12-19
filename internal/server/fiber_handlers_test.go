@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gbolo/protego/dataprovider"
+	"github.com/gbolo/protego/pkg/dataprovider"
 	"github.com/gbolo/protego/pkg/fiberapp"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"

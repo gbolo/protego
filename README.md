@@ -12,7 +12,7 @@ nginx's `auth_request` module, with the goal of providing transparent IP based A
 - Support for whitelisting a user's dynamic DNS name(s)
 - API is fully documented and testable via embedded swagger endpoint
 - Embedded Web UI for user challenges
-- Support for multiple dataprovider backends (you can write your own via an [interface](https://godoc.org/github.com/gbolo/protego/dataprovider#Provider))
+- Support for multiple dataprovider backends (you can write your own via an [interface](https://godoc.org/github.com/gbolo/protego/pkg/dataprovider#Provider))
 
 ## Building & Running
 Requirements: `go version 1.13+`

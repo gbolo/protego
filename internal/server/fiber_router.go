@@ -4,9 +4,9 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/gbolo/protego/asset"
 	_ "github.com/gbolo/protego/docs"
-	"github.com/gbolo/protego/embedded"
+	"github.com/gbolo/protego/internal/asset"
+	"github.com/gbolo/protego/internal/embedded"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/filesystem"
 	"github.com/gofiber/swagger"
@@ -17,8 +17,8 @@ func setupFiberRoutes(app *fiber.App) {
 	// API v1 routes
 	apiV1 := app.Group("/api/v1")
 
-	// Version endpoint
 	apiV1.Get("/version", fiberHandlerVersion)
+	apiV1.Get("/healthz", fiberHandlerHealthz)
 
 	// Config endpoint
 	apiV1.Get("/config", fiberHandlerConfig)

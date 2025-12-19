@@ -1,0 +1,156 @@
+# GoReleaser configuration for protego
+# https://goreleaser.com
+
+version: 2
+
+# Disable before hook (we'll use mise for tool management)
+before:
+  hooks:
+    - go mod tidy
+
+# Build configuration
+builds:
+  # Main daemon
+  - id: protego
+    binary: protego
+    main: ./
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+      - arm
+    goarm:
+      - 7
+    ignore:
+      - goos: darwin
+        goarch: amd64
+    ldflags:
+      - -s -w
+      - -X github.com/gbolo/protego/internal/meta.Version={{.Version}}
+      - -X github.com/gbolo/protego/internal/meta.CommitSHA={{.ShortCommit}}
+      - -X github.com/gbolo/protego/internal/meta.BuildDate={{.Date}}
+
+# Only build binaries, no archives
+archives:
+  - formats: [binary]
+
+# Checksum configuration
+checksum:
+  name_template: 'checksums.txt'
+  algorithm: sha256
+
+# Snapshot configuration (for testing releases)
+snapshot:
+  version_template: "{{ incpatch .Version }}-SNAPSHOT"
+
+# Changelog configuration
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - '^ci:'
+      - 'README'
+      - 'Merge pull request'
+      - 'Merge remote-tracking branch'
+  groups:
+    - title: '🚀 Features'
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: '🐛 Bug Fixes'
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: '📝 Documentation'
+      regexp: '^.*?docs(\([[:word:]]+\))??!?:.+$'
+      order: 2
+    - title: '⚡ Performance Improvements'
+      regexp: '^.*?perf(\([[:word:]]+\))??!?:.+$'
+      order: 3
+    - title: Other
+      order: 999
+
+# GitHub Release configuration
+release:
+  github:
+    owner: gbolo
+    name: protego
+  draft: false
+  prerelease: auto
+  mode: replace
+  header: |
+    ## Protego {{ .Tag }}
+    
+    ### Installation
+    
+    Download the appropriate binary for your platform from the assets below.
+    
+    ### Docker Images
+    
+    Docker images are available at:
+    - `docker.io/gbolo/protego:{{ .Tag }}`
+    - `docker.io/gbolo/protego:latest`
+    
+  footer: |
+    ## Verification
+    
+    All artifacts are checksummed. Verify with:
+    ```bash
+    sha256sum -c checksums.txt
+    ```
+    
+    **Full Changelog**: https://github.com/gbolo/protego/compare/{{ .PreviousTag }}...{{ .Tag }}
+
+# Metadata
+metadata:
+  mod_timestamp: '{{ .CommitTimestamp }}'
+
+# Docker images using dockers_v2 (multi-arch with buildx)
+dockers_v2:
+  - # ID of the image
+    id: protego
+    
+    # Path to Dockerfile
+    dockerfile: Dockerfile.goreleaser
+    
+    # IDs to filter the binaries - only include protego daemon
+    ids:
+      - protego
+    
+    # Image names
+    images:
+      - "docker.io/gbolo/protego"
+    
+    # Tags
+    tags:
+      - "{{ .Tag }}"
+      - "{{ if not .Prerelease }}latest{{ end }}"
+      - "{{ .Major }}.{{ .Minor }}"
+    
+    # Extra files to include in build context
+    extra_files:
+      - ./testdata/sampleconfig/protego.yaml
+    
+    # OCI labels
+    labels:
+      "org.opencontainers.image.title": "{{ .ProjectName }}"
+      "org.opencontainers.image.description": "Protego - IP Whitelisting System"
+      "org.opencontainers.image.created": "{{ .Date }}"
+      "org.opencontainers.image.revision": "{{ .FullCommit }}"
+      "org.opencontainers.image.version": "{{ .Version }}"
+      "org.opencontainers.image.source": "{{ .GitURL }}"
+      "org.opencontainers.image.licenses": "MIT"
+    
+    # Platforms to build for
+    platforms:
+      - linux/amd64
+      - linux/arm64
+
+    sbom: false
+

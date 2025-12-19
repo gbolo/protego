@@ -4,8 +4,8 @@ import (
 	"crypto/tls"
 	"fmt"
 
-	"github.com/gbolo/protego/config"
-	"github.com/gbolo/protego/dataprovider"
+	"github.com/gbolo/protego/internal/config"
+	"github.com/gbolo/protego/pkg/dataprovider"
 	"github.com/gbolo/protego/pkg/fiberapp"
 	"github.com/spf13/viper"
 )

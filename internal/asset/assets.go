@@ -6,7 +6,7 @@ package asset
 import (
 	"net/http"
 
-	"github.com/gbolo/protego/embedded"
+	"github.com/gbolo/protego/internal/embedded"
 )
 
 // Assets contains project assets.

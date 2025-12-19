@@ -6,8 +6,8 @@ import (
 	"time"
 
 	validate "github.com/asaskevich/govalidator"
-	"github.com/gbolo/protego/dataprovider"
 	"github.com/gbolo/protego/internal/meta"
+	"github.com/gbolo/protego/pkg/dataprovider"
 	"github.com/gofiber/fiber/v2"
 	"github.com/spf13/viper"
 )
@@ -27,6 +27,17 @@ const (
 // @Router /version [get]
 func fiberHandlerVersion(c *fiber.Ctx) error {
 	return c.JSON(version{meta.Version, meta.CommitSHA})
+}
+
+// fiberHandlerHealthz godoc
+// @Summary Health check
+// @Description Returns 200 when the server is healthy
+// @Tags Information
+// @Produce  json
+// @Success 200 {object} healthz
+// @Router /healthz [get]
+func fiberHandlerHealthz(c *fiber.Ctx) error {
+	return c.JSON(healthz{"healthy"})
 }
 
 // fiberHandlerConfig godoc

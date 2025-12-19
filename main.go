@@ -3,11 +3,11 @@ package main
 import (
 	"strings"
 
-	"github.com/gbolo/protego/config"
-	"github.com/gbolo/protego/dataprovider"
 	_ "github.com/gbolo/protego/docs"
+	"github.com/gbolo/protego/internal/config"
 	"github.com/gbolo/protego/internal/meta"
-	"github.com/gbolo/protego/server"
+	"github.com/gbolo/protego/internal/server"
+	"github.com/gbolo/protego/pkg/dataprovider"
 	"github.com/spf13/viper"
 )
 
@@ -17,7 +17,7 @@ func main() {
 	log.Infof("initializing -- %s", meta.GetAppMetadata("protego").ToString())
 
 	// init the config
-	config.ConfigInit("./testdata/sampleconfig/protego.yaml", true)
+	config.ConfigInit("", true)
 
 	// init the data provider
 	var p dataprovider.Provider
