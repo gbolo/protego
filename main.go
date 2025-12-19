@@ -1,6 +1,9 @@
 package main
 
 import (
+	"flag"
+	"fmt"
+	"os"
 	"strings"
 
 	_ "github.com/gbolo/protego/docs"
@@ -11,13 +14,26 @@ import (
 	"github.com/spf13/viper"
 )
 
+var (
+	configFile  = flag.String("config", "", "Path to config file (optional, will use defaults if not specified)")
+	showVersion = flag.Bool("version", false, "Show version information and exit")
+)
+
 var log = config.GetLogger()
 
 func main() {
+	flag.Parse()
+
+	// Handle version flag
+	if *showVersion {
+		fmt.Println(meta.GetAppMetadata("protego").ToString())
+		os.Exit(0)
+	}
+
 	log.Infof("initializing -- %s", meta.GetAppMetadata("protego").ToString())
 
 	// init the config
-	config.ConfigInit("", true)
+	config.ConfigInit(*configFile, true)
 
 	// init the data provider
 	var p dataprovider.Provider
