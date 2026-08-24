@@ -19,10 +19,13 @@ import (
 // Test setup helpers
 // -----------------------------------------------------------------------------
 
-// setupTestFiberApp sets up a fresh Fiber app with in-memory data provider
-func setupTestFiberApp(t *testing.T) interface {
+// testApp is the subset of *fiber.App the tests need
+type testApp interface {
 	Test(*http.Request, ...int) (*http.Response, error)
-} {
+}
+
+// resetTestState gives each test a fresh config and in-memory data provider
+func resetTestState(t *testing.T) {
 	t.Helper()
 
 	// Clean Viper between tests
@@ -44,10 +47,51 @@ func setupTestFiberApp(t *testing.T) interface {
 
 	// Initialize ddnsProvider with data provider reference
 	ddnsProvider = dataprovider.NewDdnsProvider(dataProvider)
+}
 
-	// Create Fiber app
+// setupTestFiberApp sets up a fresh Fiber app with in-memory data provider.
+// Both route sets are registered on a single app so that handler level tests can
+// exercise admin and public endpoints together. Tests that care about which
+// listener a route lives on should use setupTestPublicApp/setupTestAdminApp
+// instead: see TestFiberListenerSeparation.
+func setupTestFiberApp(t *testing.T) testApp {
+	t.Helper()
+	resetTestState(t)
+
 	app := fiberapp.GetFiberApp("Protego-Test")
-	setupFiberRoutes(app)
+	// the challenge endpoint is the only public route not also present on the
+	// admin listener. Register it first so it takes precedence over the static
+	// file catch-all that setupAdminRoutes installs at the root.
+	app.Post("/api/v1/challenge", fiberHandlerChallenge)
+	setupAdminRoutes(app)
+
+	return app
+}
+
+// setupTestPublicApp builds the public listener exactly as production does
+func setupTestPublicApp(t *testing.T) testApp {
+	t.Helper()
+	resetTestState(t)
+
+	app := fiberapp.GetFiberAppWithOptions(fiberapp.Options{
+		AppName:       "Protego-Test",
+		EnableMetrics: false,
+	})
+	setupPublicRoutes(app)
+
+	return app
+}
+
+// setupTestAdminApp builds the admin listener exactly as production does
+func setupTestAdminApp(t *testing.T) testApp {
+	t.Helper()
+	resetTestState(t)
+
+	app := fiberapp.GetFiberAppWithOptions(fiberapp.Options{
+		AppName:       "Protego-Test-Admin",
+		EnableMetrics: true,
+	})
+	setupAdminRoutes(app)
 
 	return app
 }
@@ -57,7 +101,7 @@ func setupTestFiberApp(t *testing.T) interface {
 // -----------------------------------------------------------------------------
 
 func TestFiberHandlerVersion(t *testing.T) {
-	app := setupTestFiberApp(t) //nolint:bodyclose // False positive: setupTestFiberApp doesn't return response
+	app := setupTestFiberApp(t)
 
 	req, _ := http.NewRequestWithContext(t.Context(), "GET", "/api/v1/version", http.NoBody)
 	res, err := app.Test(req, -1)
@@ -79,7 +123,7 @@ func TestFiberHandlerVersion(t *testing.T) {
 // -----------------------------------------------------------------------------
 
 func TestFiberHandlerUserCRUD(t *testing.T) {
-	app := setupTestFiberApp(t) //nolint:bodyclose // False positive: setupTestFiberApp doesn't return response
+	app := setupTestFiberApp(t)
 
 	// Test data
 	userId := "testuser" // Use a defined user ID
@@ -202,7 +246,7 @@ func TestFiberHandlerUserCRUD(t *testing.T) {
 }
 
 func TestFiberHandlerUserUnauthorized(t *testing.T) {
-	app := setupTestFiberApp(t) //nolint:bodyclose // False positive: setupTestFiberApp doesn't return response
+	app := setupTestFiberApp(t)
 
 	tests := []struct {
 		description string
@@ -260,7 +304,7 @@ func TestFiberHandlerUserUnauthorized(t *testing.T) {
 // -----------------------------------------------------------------------------
 
 func TestFiberHandlerACLCRUD(t *testing.T) {
-	app := setupTestFiberApp(t) //nolint:bodyclose // False positive: setupTestFiberApp doesn't return response
+	app := setupTestFiberApp(t)
 
 	// Test data
 	testIP := "192.168.1.100"
@@ -377,7 +421,7 @@ func TestFiberHandlerACLCRUD(t *testing.T) {
 }
 
 func TestFiberHandlerACLInvalidIP(t *testing.T) {
-	app := setupTestFiberApp(t) //nolint:bodyclose // False positive: setupTestFiberApp doesn't return response
+	app := setupTestFiberApp(t)
 
 	t.Run("invalid IP format", func(t *testing.T) {
 		createReqBody := addACL{AllowAll: true}
@@ -395,7 +439,7 @@ func TestFiberHandlerACLInvalidIP(t *testing.T) {
 }
 
 func TestFiberHandlerACLGetAllEmpty(t *testing.T) {
-	app := setupTestFiberApp(t) //nolint:bodyclose // False positive: setupTestFiberApp doesn't return response
+	app := setupTestFiberApp(t)
 
 	req, _ := http.NewRequestWithContext(t.Context(), "GET", "/api/v1/acl", http.NoBody)
 	req.Header.Set("Admin-Secret", "test-admin-secret")
@@ -417,7 +461,7 @@ func TestFiberHandlerACLGetAllEmpty(t *testing.T) {
 // -----------------------------------------------------------------------------
 
 func TestFiberRoutes(t *testing.T) {
-	app := setupTestFiberApp(t) //nolint:bodyclose // False positive: setupTestFiberApp doesn't return response
+	app := setupTestFiberApp(t)
 
 	tests := []struct {
 		description  string
@@ -458,11 +502,121 @@ func TestFiberRoutes(t *testing.T) {
 }
 
 // -----------------------------------------------------------------------------
+// Listener separation
+// -----------------------------------------------------------------------------
+
+// TestFiberListenerSeparation asserts that the public listener exposes only the
+// paths a user needs to complete a challenge, and that everything sensitive is
+// reachable on the admin listener only. Any new admin route must stay off the
+// public listener: this test is what catches it if it does not.
+func TestFiberListenerSeparation(t *testing.T) {
+	// routes that must NOT exist on the public listener
+	adminOnly := []struct {
+		method string
+		route  string
+	}{
+		{"GET", "/admin"},
+		{"GET", "/admin.html"},
+		{"GET", "/admin.js"},
+		{"GET", "/admin.css"},
+		{"GET", "/metrics"},
+		{"GET", "/swagger/index.html"},
+		{"GET", "/api/v1/authorize"},
+		{"GET", "/api/v1/config"},
+		{"GET", "/api/v1/user"},
+		{"POST", "/api/v1/user"},
+		{"GET", "/api/v1/acl"},
+		{"POST", "/api/v1/acl/192.0.2.10"},
+		{"DELETE", "/api/v1/user/someuser"},
+		// the source of the embedded file system must never be served
+		{"GET", "/embed.go"},
+	}
+
+	t.Run("public listener hides admin routes", func(t *testing.T) {
+		app := setupTestPublicApp(t)
+
+		for _, tc := range adminOnly {
+			t.Run(tc.method+" "+tc.route, func(t *testing.T) {
+				req, _ := http.NewRequestWithContext(t.Context(), tc.method, tc.route, http.NoBody)
+				res, err := app.Test(req, -1)
+				require.NoError(t, err)
+				defer res.Body.Close()
+
+				assert.Equal(t, 404, res.StatusCode,
+					"%s %s must not be reachable on the public listener", tc.method, tc.route)
+			})
+		}
+	})
+
+	t.Run("public listener serves the challenge", func(t *testing.T) {
+		app := setupTestPublicApp(t)
+
+		// the challenge page
+		req, _ := http.NewRequestWithContext(t.Context(), "GET", "/", http.NoBody)
+		res, err := app.Test(req, -1)
+		require.NoError(t, err)
+		defer res.Body.Close()
+		assert.Equal(t, 200, res.StatusCode)
+
+		// the shared favicon referenced by that page
+		req, _ = http.NewRequestWithContext(t.Context(), "GET", "/assets/favicon.png", http.NoBody)
+		res2, err := app.Test(req, -1)
+		require.NoError(t, err)
+		defer res2.Body.Close()
+		assert.Equal(t, 200, res2.StatusCode)
+
+		// the version it renders in its footer
+		req, _ = http.NewRequestWithContext(t.Context(), "GET", "/api/v1/version", http.NoBody)
+		res3, err := app.Test(req, -1)
+		require.NoError(t, err)
+		defer res3.Body.Close()
+		assert.Equal(t, 200, res3.StatusCode)
+
+		// the challenge endpoint itself: 400 because no X-Real-IP is set, which
+		// still proves the route is registered
+		req, _ = http.NewRequestWithContext(t.Context(), "POST", "/api/v1/challenge", http.NoBody)
+		res4, err := app.Test(req, -1)
+		require.NoError(t, err)
+		defer res4.Body.Close()
+		assert.Equal(t, 400, res4.StatusCode)
+	})
+
+	t.Run("admin listener serves admin routes", func(t *testing.T) {
+		app := setupTestAdminApp(t)
+
+		// unauthenticated admin API calls should be rejected, not missing
+		for _, route := range []string{"/api/v1/user", "/api/v1/acl", "/api/v1/config"} {
+			req, _ := http.NewRequestWithContext(t.Context(), "GET", route, http.NoBody)
+			res, err := app.Test(req, -1)
+			require.NoError(t, err)
+			assert.Equal(t, 401, res.StatusCode, "%s should exist on the admin listener", route)
+			res.Body.Close()
+		}
+
+		// admin UI, both at the root and on the historical /admin path
+		for _, route := range []string{"/", "/admin", "/admin.css", "/admin.js", "/metrics"} {
+			req, _ := http.NewRequestWithContext(t.Context(), "GET", route, http.NoBody)
+			res, err := app.Test(req, -1)
+			require.NoError(t, err)
+			assert.Equal(t, 200, res.StatusCode, "%s should be served on the admin listener", route)
+			res.Body.Close()
+		}
+
+		// the challenge endpoint does not belong here
+		req, _ := http.NewRequestWithContext(t.Context(), "POST", "/api/v1/challenge", http.NoBody)
+		res, err := app.Test(req, -1)
+		require.NoError(t, err)
+		defer res.Body.Close()
+		assert.Equal(t, 404, res.StatusCode, "the challenge endpoint should be public only")
+	})
+}
+
+// -----------------------------------------------------------------------------
 // Challenge endpoint with ACL merging
 // -----------------------------------------------------------------------------
 
 func TestFiberHandlerChallenge_MergeACLsForSameIP(t *testing.T) {
-	app := setupTestFiberApp(t) //nolint:bodyclose // False positive: setupTestFiberApp doesn't return response
+	app := setupTestFiberApp(t)
 
 	const (
 		userId1     = "user1"
@@ -945,7 +1099,7 @@ func TestFiberHandlerMaxTTL(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			app := setupTestFiberApp(t) //nolint:bodyclose // False positive: setupTestFiberApp doesn't return response
+			app := setupTestFiberApp(t)
 			viper.Set("ttl.max", tt.maxTTL)
 
 			// Run setup if needed
@@ -991,7 +1145,7 @@ func TestFiberHandlerMaxTTL(t *testing.T) {
 // -----------------------------------------------------------------------------
 
 func TestFiberHandlerUserDisable_RemovesACLs(t *testing.T) {
-	app := setupTestFiberApp(t) //nolint:bodyclose // False positive: setupTestFiberApp doesn't return response
+	app := setupTestFiberApp(t)
 
 	const (
 		testUserID   = "testuser-disable"
@@ -1153,7 +1307,7 @@ func TestFiberHandlerUserDisable_RemovesACLs(t *testing.T) {
 }
 
 func TestFiberHandlerUserDisable_NoACLs(t *testing.T) {
-	app := setupTestFiberApp(t) //nolint:bodyclose // False positive: setupTestFiberApp doesn't return response
+	app := setupTestFiberApp(t)
 
 	const (
 		testUserID = "testuser-no-acls"
@@ -1206,7 +1360,7 @@ func TestFiberHandlerUserDisable_NoACLs(t *testing.T) {
 }
 
 func TestFiberHandlerUserDisable_AlreadyDisabled(t *testing.T) {
-	app := setupTestFiberApp(t) //nolint:bodyclose // False positive: setupTestFiberApp doesn't return response
+	app := setupTestFiberApp(t)
 
 	const (
 		testUserID = "testuser-already-disabled"
@@ -1289,7 +1443,7 @@ func TestFiberHandlerUserDisable_AlreadyDisabled(t *testing.T) {
 // -----------------------------------------------------------------------------
 
 func TestFiberHandlerUserDelete_RemovesACLs(t *testing.T) {
-	app := setupTestFiberApp(t) //nolint:bodyclose // False positive: setupTestFiberApp doesn't return response
+	app := setupTestFiberApp(t)
 
 	const (
 		testUserID   = "testuser-delete"
@@ -1444,7 +1598,7 @@ func TestFiberHandlerUserDelete_RemovesACLs(t *testing.T) {
 }
 
 func TestFiberHandlerUserDelete_NoACLs(t *testing.T) {
-	app := setupTestFiberApp(t) //nolint:bodyclose // False positive: setupTestFiberApp doesn't return response
+	app := setupTestFiberApp(t)
 
 	const (
 		testUserID = "testuser-delete-no-acls"

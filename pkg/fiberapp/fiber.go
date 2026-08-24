@@ -14,7 +14,26 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/requestid"
 )
 
-func GetFiberApp(appName string) (app *fiber.App) {
+// Options configures the Fiber app returned by GetFiberAppWithOptions.
+type Options struct {
+	// AppName is used for the app name, the "Server" response header and the
+	// title of the metrics dashboard.
+	AppName string
+	// EnableMetrics registers the /metrics monitor dashboard. It is served
+	// without authentication and reports process level details (CPU, memory,
+	// goroutine and connection counts), so only enable it on a listener that
+	// is not publicly reachable.
+	EnableMetrics bool
+}
+
+// GetFiberApp returns a Fiber app with the metrics dashboard enabled.
+func GetFiberApp(appName string) *fiber.App {
+	return GetFiberAppWithOptions(Options{AppName: appName, EnableMetrics: true})
+}
+
+// GetFiberAppWithOptions returns a Fiber app configured by opts.
+func GetFiberAppWithOptions(opts Options) (app *fiber.App) {
+	appName := opts.AppName
 	app = fiber.New(fiber.Config{
 		// app name
 		AppName: appName,
@@ -46,7 +65,9 @@ func GetFiberApp(appName string) (app *fiber.App) {
 	addFiberMiddlewareRequestID(app)
 	addFiberMiddlewareCompression(app)
 	addFiberMiddlewareEtag(app)
-	addFiberMiddlewareMetrics(app)
+	if opts.EnableMetrics {
+		addFiberMiddlewareMetrics(app)
+	}
 	addFiberMiddlewareFavicon(app)
 
 	return app

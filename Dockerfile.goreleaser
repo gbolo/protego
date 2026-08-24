@@ -30,12 +30,16 @@ COPY ./testdata/sampleconfig/protego.yaml /etc/protego/protego.yml
 # Switch to non-root user
 USER protego
 
-# Expose the default port
+# Expose the public listener only. The admin listener (admin API, admin UI,
+# swagger docs, metrics and forward-auth) defaults to loopback inside the
+# container. To reach it, set PROTEGO_ADMIN_BIND_ADDRESS=0.0.0.0 and publish the
+# port to loopback on the host only, e.g. -p 127.0.0.1:8081:8081
 EXPOSE 8080
 
 # ensure in docker we bind to 0.0.0.0:8080 for health checks
 ENV PROTEGO_SERVER_BIND_ADDRESS=0.0.0.0 \
-    PROTEGO_SERVER_BIND_PORT=8080
+    PROTEGO_SERVER_BIND_PORT=8080 \
+    PROTEGO_ADMIN_BIND_PORT=8081
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8080/api/v1/healthz || exit 1

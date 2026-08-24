@@ -15,6 +15,7 @@ Protego is a lightweight, self-hosted REST API service that provides transparent
 5. ACLs automatically expire, requiring periodic re-authentication
 
 **Key capabilities:**
+- **Split Public/Admin Listeners**: The internet-facing port serves only the challenge page and challenge endpoint; the admin API, admin UI, swagger docs, metrics and forward-auth endpoint live on a separate, loopback-bound port
 - **Self-Service IP Whitelisting**: Users whitelist their own IPs through simple username/password challenges
 - **Full Featured Admin UI**: Administrators can manage users and ACLs easily from the admin ui
 - **Time-Based ACLs**: All IP whitelists expire based on configurable TTLs (enforced maximum limits)
@@ -24,6 +25,25 @@ Protego is a lightweight, self-hosted REST API service that provides transparent
 - **RESTful API**: Fully documented API with embedded Swagger UI for administration
 - **Flexible Storage**: Multiple backend options (memory, BoltDB, or implement your own)
 
+
+## Listeners
+
+Protego runs two HTTP listeners so that the internet-facing surface stays as small as possible:
+
+| Listener | Default | Routes | Exposure |
+|---|---|---|---|
+| **public** | `server.bind_address:8080` | `GET /` (challenge UI), `GET /assets/*`, `POST /api/v1/challenge`, `GET /api/v1/version`, `GET /api/v1/healthz` | behind your reverse proxy |
+| **admin** | `admin.bind_address:8081` (loopback) | `GET /api/v1/authorize`, all `/api/v1/user` and `/api/v1/acl` endpoints, `GET /api/v1/config`, `/admin`, `/swagger/*`, `/metrics` | **never public** |
+
+The admin listener must not be reachable from untrusted networks. It serves the
+metrics dashboard and swagger docs without authentication, and `/api/v1/authorize`
+trusts a client-supplied `X-Real-IP` header. Keep it on loopback and reach it over
+SSH, a VPN, or Tailscale; if you must bind it to a wider interface, restrict it at
+the firewall. Protego logs a warning at startup if `admin.bind_address` is a wildcard.
+
+Note that `/api/v1/authorize` lives on the admin listener because it is called by
+your reverse proxy, not by users. Point your proxy's forward-auth at the admin
+port, and make sure the proxy can reach it.
 
 ## Getting Started
 
@@ -48,10 +68,10 @@ server {
         proxy_pass http://backend:8080;
     }
 
-    # Internal auth endpoint
+    # Internal auth endpoint. Note the admin port (8081), not the public one.
     location = /auth {
         internal;
-        proxy_pass http://protego:8080/api/v1/authorize;
+        proxy_pass http://protego:8081/api/v1/authorize;
         proxy_pass_request_body off;
         proxy_set_header Content-Length "";
         proxy_set_header Host $http_host;
@@ -59,7 +79,8 @@ server {
     }
 }
 
-# Challenge UI (for users to whitelist their IP)
+# Challenge UI (for users to whitelist their IP). Points at the public port,
+# which serves nothing but the challenge page and the challenge endpoint.
 server {
     listen 443 ssl http2;
     server_name protego.example.com;
@@ -69,18 +90,36 @@ server {
     location / {
         proxy_pass http://protego:8080;
         proxy_set_header Host $http_host;
+        # always overwrite X-Real-IP: never forward a client-supplied value,
+        # or a user could whitelist an IP address that is not their own
         proxy_set_header X-Real-IP $remote_addr;
     }
 }
 ```
 
+Rate limiting the challenge endpoint is recommended, since it is unauthenticated
+and each request performs a bcrypt comparison:
+
+```nginx
+# in http{}
+limit_req_zone $binary_remote_addr zone=protego_challenge:10m rate=10r/m;
+
+# in the challenge UI server{} block
+location = /api/v1/challenge {
+    limit_req zone=protego_challenge burst=5 nodelay;
+    proxy_pass http://protego:8080;
+    proxy_set_header Host $http_host;
+    proxy_set_header X-Real-IP $remote_addr;
+}
+```
+
 #### Traefik
 
-Uses the [ForwardAuth middleware](https://doc.traefik.io/traefik/middlewares/http/forwardauth/). Set the `address` to `http://protego:8080/api/v1/authorize`.
+Uses the [ForwardAuth middleware](https://doc.traefik.io/traefik/middlewares/http/forwardauth/). Set the `address` to `http://protego:8081/api/v1/authorize` (the admin listener).
 
 #### Caddy
 
-Uses the [forward_auth directive](https://caddyserver.com/docs/caddyfile/directives/forward_auth). Set the URI to `http://protego:8080/api/v1/authorize`.
+Uses the [forward_auth directive](https://caddyserver.com/docs/caddyfile/directives/forward_auth). Set the URI to `http://protego:8081/api/v1/authorize` (the admin listener).
 
 ---
 
@@ -108,8 +147,15 @@ chmod +x ./protego
 #### Option B: Using Docker
 
 ```bash
-# Run with default configuration
+# Run with default configuration (public listener only)
 docker run -p 8080:8080 gbolo/protego:latest
+
+# Also reach the admin listener, published to loopback on the host only.
+# The admin listener defaults to loopback inside the container, so it has to be
+# told to bind to the container's interface before the port can be published.
+docker run -p 8080:8080 -p 127.0.0.1:8081:8081 \
+  -e PROTEGO_ADMIN_BIND_ADDRESS=0.0.0.0 \
+  gbolo/protego:latest
 
 # Run with custom config
 docker run -p 8080:8080 \
@@ -119,10 +165,11 @@ docker run -p 8080:8080 \
 ```
 
 Once running, access:
-- **API**: http://localhost:8080/api/v1
-- **Swagger UI**: http://localhost:8080/swagger
-- **Admin UI**: http://localhost:8080/admin
-- **Challenge UI**: http://localhost:8080
+- **Challenge UI**: http://localhost:8080 (public listener)
+- **Admin UI**: http://localhost:8081/ (admin listener, also at `/admin`)
+- **Admin API**: http://localhost:8081/api/v1
+- **Swagger UI**: http://localhost:8081/swagger
+- **Metrics**: http://localhost:8081/metrics
 
 ---
 
@@ -130,14 +177,14 @@ Once running, access:
 
 #### Option A: Using the Admin UI (Recommended)
 
-Navigate to the **[Admin UI](http://localhost:8080/admin)** and create users through the web interface.
+Navigate to the **[Admin UI](http://localhost:8081/admin)** on the admin listener and create users through the web interface.
 ![Add User UI](https://github.com/gbolo/protego/raw/master/docs/diagrams/screenshot_protego_add_user.png)
 
 
 #### Option B: Using the API
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/user \
+curl -X POST http://localhost:8081/api/v1/user \
   -H "Admin-Secret: your-admin-secret" \
   -H "Content-Type: application/json" \
   -d '{
@@ -202,11 +249,10 @@ Protego uses a YAML configuration file. By default, it looks for `protego.yaml` 
 **Example configuration:**
 
 ```yaml
-# Server settings
+# Public listener: challenge UI and challenge endpoint only
 server:
   bind_address: "0.0.0.0"
   bind_port: "8080"
-  enable_profiler: false  # Enable pprof endpoints (/debug/pprof)
   enable_tls: false
   tls_cert_file: ""
   tls_key_file: ""
@@ -220,9 +266,11 @@ db:
   provider: "memory"  # Options: memory, bolt
   bolt_db_path: "./protego.db"
 
-# Admin API authentication
+# Admin listener and admin API authentication
 admin:
   secret: "change-me-to-a-secure-secret"
+  bind_address: "127.0.0.1"  # keep off public interfaces
+  bind_port: "8081"          # must differ from server.bind_port
 
 # Time-to-live settings
 ttl:
@@ -236,6 +284,8 @@ All configuration options can be set via environment variables using the `PROTEG
 
 ```bash
 export PROTEGO_SERVER_BIND_PORT="9090"
+export PROTEGO_ADMIN_BIND_ADDRESS="127.0.0.1"
+export PROTEGO_ADMIN_BIND_PORT="9091"
 export PROTEGO_LOG_LEVEL="debug"
 export PROTEGO_ADMIN_SECRET="my-secure-secret"
 export PROTEGO_TTL_MAX="43200"  # 30 days
@@ -249,10 +299,9 @@ export PROTEGO_DB_BOLT_DB_PATH="/data/protego.db"
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `server.bind_address` | string | `0.0.0.0` | IP address to bind to |
-| `server.bind_port` | string | `8080` | Port to listen on |
-| `server.enable_profiler` | bool | `false` | Enable pprof profiling endpoints |
-| `server.enable_tls` | bool | `false` | Enable TLS/HTTPS |
+| `server.bind_address` | string | `127.0.0.1` | IP address the public listener binds to |
+| `server.bind_port` | string | `8080` | Port the public listener listens on |
+| `server.enable_tls` | bool | `false` | Enable TLS/HTTPS on **both** listeners |
 | `server.tls_cert_file` | string | - | Path to TLS certificate file |
 | `server.tls_key_file` | string | - | Path to TLS private key file |
 
@@ -274,6 +323,8 @@ export PROTEGO_DB_BOLT_DB_PATH="/data/protego.db"
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `admin.secret` | string | - | **Required**. Secret for admin API authentication |
+| `admin.bind_address` | string | `127.0.0.1` | IP address the admin listener binds to. A wildcard here exposes the admin API, admin UI, swagger docs and metrics dashboard |
+| `admin.bind_port` | string | `8081` | Port the admin listener listens on. Must differ from `server.bind_port` |
 
 #### TTL (Time-to-Live)
 

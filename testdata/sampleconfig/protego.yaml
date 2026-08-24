@@ -18,7 +18,17 @@ ttl:
 admin:
   secret: supersecret
 
-# http server settings
+  # the admin listener serves the admin API, the admin UI, the swagger docs and
+  # the metrics dashboard, plus the /api/v1/authorize endpoint used by your
+  # reverse proxy. None of these should be reachable from the internet, so bind
+  # this to loopback or a private interface only.
+  bind_address: 127.0.0.1
+
+  # port for the admin listener. Must differ from server.bind_port.
+  bind_port: 8081
+
+# public http server settings.
+# this listener only serves the challenge UI and the challenge endpoint
 server:
 
   # local interface to bind to

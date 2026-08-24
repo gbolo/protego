@@ -9,5 +9,12 @@ import (
 	"github.com/gbolo/protego/internal/embedded"
 )
 
-// Assets contains project assets.
-var Assets http.FileSystem = embedded.HTTPFileSystem()
+// Project assets, split per listener. See internal/embedded/embed.go.
+var (
+	// PublicFS holds the challenge UI, safe to serve publicly.
+	PublicFS http.FileSystem = http.FS(embedded.Public())
+	// AdminFS holds the admin UI and must only be served on the admin listener.
+	AdminFS http.FileSystem = http.FS(embedded.Admin())
+	// AssetsFS holds shared images and is served on both listeners.
+	AssetsFS http.FileSystem = http.FS(embedded.Assets())
+)
