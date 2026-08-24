@@ -39,6 +39,10 @@ func initViper(cfgFile string) {
 	viper.SetDefault("server.bind_port", "8080")
 	viper.SetDefault("server.access_log", true)
 	viper.SetDefault("db.provider", "bolt")
+	// the admin listener defaults to loopback only: it serves the admin API,
+	// the admin UI, swagger and metrics, none of which should face the internet
+	viper.SetDefault("admin.bind_address", "127.0.0.1")
+	viper.SetDefault("admin.bind_port", "8081")
 
 	// Configuring and pulling overrides from environmental variables
 	viper.SetEnvPrefix(EnvConfigPrefix)
@@ -76,6 +80,8 @@ func printConfigSummary() {
 		"log_level",
 		"server.bind_address",
 		"server.bind_port",
+		"admin.bind_address",
+		"admin.bind_port",
 		"server.tls.enabled",
 		"server.access_log",
 		"server.compression",
@@ -88,6 +94,23 @@ func printConfigSummary() {
 
 // checks that the config is correctly defined
 func sanityChecks() {
+	// the public and admin listeners cannot share a port. Fail here rather than
+	// let the second listener die with a bind error that says nothing about
+	// which config option is wrong.
+	if viper.GetString("server.bind_port") == viper.GetString("admin.bind_port") {
+		log.Fatalf(
+			"server.bind_port and admin.bind_port must differ, both are set to %s",
+			viper.GetString("server.bind_port"),
+		)
+	}
+
+	// warn loudly if the admin listener is not restricted to a single interface
+	switch viper.GetString("admin.bind_address") {
+	case "0.0.0.0", "::", "":
+		log.Warning("admin.bind_address is not restricted to a single interface: the admin API, admin UI, " +
+			"swagger docs and metrics dashboard may be reachable from untrusted networks")
+	}
+
 	maxTTl := viper.GetInt("ttl.max")
 	switch {
 	case maxTTl < 0:

@@ -3,10 +3,12 @@ package server
 import (
 	"crypto/tls"
 	"fmt"
+	"net"
 
 	"github.com/gbolo/protego/internal/config"
 	"github.com/gbolo/protego/pkg/dataprovider"
 	"github.com/gbolo/protego/pkg/fiberapp"
+	"github.com/gofiber/fiber/v2"
 	"github.com/spf13/viper"
 )
 
@@ -63,35 +65,69 @@ func InitFiberServer(p dataprovider.Provider) error {
 	return startFiberServer()
 }
 
+// startFiberServer starts the two HTTP listeners:
+//
+//	public -- the challenge UI and the challenge endpoint only
+//	admin  -- the admin API and UI, swagger docs, metrics and forward-auth
+//
+// Only the public listener is meant to be reachable from the internet. The
+// process exits as soon as either listener fails.
 func startFiberServer() error {
-	// Create Fiber app
-	app := fiberapp.GetFiberApp("Protego")
+	// the public listener gets no metrics dashboard: it is unauthenticated
+	publicApp := fiberapp.GetFiberAppWithOptions(fiberapp.Options{
+		AppName:       "Protego",
+		EnableMetrics: false,
+	})
+	setupPublicRoutes(publicApp)
 
-	// Setup routes
-	setupFiberRoutes(app)
+	adminApp := fiberapp.GetFiberAppWithOptions(fiberapp.Options{
+		AppName:       "Protego Admin",
+		EnableMetrics: true,
+	})
+	setupAdminRoutes(adminApp)
 
-	// Get server config
-	address := fmt.Sprintf(
-		"%s:%s",
+	publicAddress := net.JoinHostPort(
 		viper.GetString("server.bind_address"),
 		viper.GetString("server.bind_port"),
 	)
+	adminAddress := net.JoinHostPort(
+		viper.GetString("admin.bind_address"),
+		viper.GetString("admin.bind_port"),
+	)
 
-	log.Infof("starting Fiber HTTP server: listening on %s", address)
-
-	// Start with or without TLS
-	if viper.GetBool("server.tls.enabled") {
-		_, err := configureFiberTLS()
-		if err != nil {
+	// validate the TLS material once, before either listener starts
+	tlsEnabled := viper.GetBool("server.tls.enabled")
+	if tlsEnabled {
+		if _, err := configureFiberTLS(); err != nil {
 			log.Fatalf("error configuring TLS: %s", err)
 			return err
 		}
-
 		log.Infof("TLS enabled")
-		return app.ListenTLS(address, viper.GetString("server.tls.cert_chain"), viper.GetString("server.tls.private_key"))
 	}
 
-	return app.Listen(address)
+	listen := func(name, address string, app *fiber.App) error {
+		log.Infof("starting %s HTTP server: listening on %s", name, address)
+		if tlsEnabled {
+			return app.ListenTLS(
+				address,
+				viper.GetString("server.tls.cert_chain"),
+				viper.GetString("server.tls.private_key"),
+			)
+		}
+		return app.Listen(address)
+	}
+
+	// buffered so the goroutine that loses the race can still exit
+	errChan := make(chan error, 2)
+	go func() {
+		errChan <- listen("admin", adminAddress, adminApp)
+	}()
+	go func() {
+		errChan <- listen("public", publicAddress, publicApp)
+	}()
+
+	// either listener going down takes the process with it
+	return <-errChan
 }
 
 // configureFiberTLS configures TLS settings for Fiber

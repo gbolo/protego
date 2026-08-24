@@ -2,19 +2,48 @@ package server
 
 import (
 	"io"
-	"net/http"
 
 	_ "github.com/gbolo/protego/docs"
 	"github.com/gbolo/protego/internal/asset"
-	"github.com/gbolo/protego/internal/embedded"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/filesystem"
 	"github.com/gofiber/swagger"
 )
 
-// setupFiberRoutes configures all routes for the Fiber app
-func setupFiberRoutes(app *fiber.App) {
-	// API v1 routes
+// setupPublicRoutes configures the routes required for a user to complete a
+// challenge and nothing else. Everything registered here is reachable from the
+// internet, so keep this list as small as possible. Admin endpoints, the admin
+// UI, the swagger docs, the metrics dashboard and the forward-auth endpoint all
+// belong on the admin listener: see setupAdminRoutes.
+func setupPublicRoutes(app *fiber.App) {
+	apiV1 := app.Group("/api/v1")
+
+	// the challenge page reads the version to render its footer
+	apiV1.Get("/version", fiberHandlerVersion)
+	apiV1.Get("/healthz", fiberHandlerHealthz)
+
+	// Challenge endpoint: the reason this listener exists
+	apiV1.Post("/challenge", fiberHandlerChallenge)
+
+	// Shared images. Must be registered before the catch-all below.
+	app.Use("/assets", filesystem.New(filesystem.Config{
+		Root:   asset.AssetsFS,
+		Browse: false,
+	}))
+
+	// Challenge UI
+	app.Use("/", filesystem.New(filesystem.Config{
+		Root:   asset.PublicFS,
+		Index:  "index.html",
+		Browse: false,
+	}))
+}
+
+// setupAdminRoutes configures the admin API, the admin UI, the swagger docs and
+// the forward-auth endpoint. This listener trusts a client supplied X-Real-IP
+// header and serves unauthenticated diagnostics, so it must never be publicly
+// reachable. Bind it to loopback or a private network.
+func setupAdminRoutes(app *fiber.App) {
 	apiV1 := app.Group("/api/v1")
 
 	apiV1.Get("/version", fiberHandlerVersion)
@@ -23,11 +52,8 @@ func setupFiberRoutes(app *fiber.App) {
 	// Config endpoint
 	apiV1.Get("/config", fiberHandlerConfig)
 
-	// Authorization endpoint
+	// Authorization endpoint: called by the reverse proxy, not by users
 	apiV1.Get("/authorize", fiberHandlerAuthorize)
-
-	// Challenge endpoint
-	apiV1.Post("/challenge", fiberHandlerChallenge)
 
 	// User management endpoints
 	apiV1.Post("/user", fiberHandlerUserAdd)
@@ -46,27 +72,37 @@ func setupFiberRoutes(app *fiber.App) {
 	// Swagger documentation
 	app.Get("/swagger/*", swagger.HandlerDefault)
 
-	// Admin UI
-	app.Get("/admin", func(c *fiber.Ctx) error {
-		file, err := asset.Assets.Open("/admin.html")
-		if err != nil {
-			return c.Status(fiber.StatusNotFound).SendString("Admin page not found")
-		}
-		defer file.Close()
+	// Admin UI. Also served at the root of this listener by the catch-all below,
+	// this route is kept so the historical /admin path keeps working.
+	app.Get("/admin", fiberHandlerAdminUI)
 
-		content, err := io.ReadAll(file)
-		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).SendString("Error reading admin page")
-		}
-
-		c.Set("Content-Type", "text/html; charset=utf-8")
-		return c.Send(content)
-	})
-
-	// Serve static files
-	app.Use("/", filesystem.New(filesystem.Config{
-		Root:       http.FS(embedded.FS),
-		PathPrefix: "",
-		Browse:     false,
+	// Shared images. Must be registered before the catch-all below.
+	app.Use("/assets", filesystem.New(filesystem.Config{
+		Root:   asset.AssetsFS,
+		Browse: false,
 	}))
+
+	// Admin UI static files (admin.html, admin.css, admin.js)
+	app.Use("/", filesystem.New(filesystem.Config{
+		Root:   asset.AdminFS,
+		Index:  "admin.html",
+		Browse: false,
+	}))
+}
+
+// fiberHandlerAdminUI serves the admin UI page.
+func fiberHandlerAdminUI(c *fiber.Ctx) error {
+	file, err := asset.AdminFS.Open("/admin.html")
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).SendString("Admin page not found")
+	}
+	defer file.Close()
+
+	content, err := io.ReadAll(file)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).SendString("Error reading admin page")
+	}
+
+	c.Set("Content-Type", "text/html; charset=utf-8")
+	return c.Send(content)
 }
